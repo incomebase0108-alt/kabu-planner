@@ -241,21 +241,23 @@ document.querySelectorAll('#style button').forEach(b=>b.onclick=()=>{
 });
 
 // ================= データ取得 =================
-async function fetchYahoo(code){
-  const u=`https://query1.finance.yahoo.com/v8/finance/chart/${code}.T?range=1y&interval=1d`;
-  const routes=[
-    u,
-    'https://corsproxy.io/?url='+encodeURIComponent(u),
-    'https://api.allorigins.win/raw?url='+encodeURIComponent(u),
-    'https://thingproxy.freeboard.io/fetch/'+u,
+// 複数のCORSプロキシを順に試し、生テキストを返す
+async function proxiedText(url, timeoutMs=9000){
+  const proxies=[
+    u=>`https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`,
+    u=>`https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+    u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    u=>u, // 直接（端末によっては通る）
+    u=>`https://thingproxy.freeboard.io/fetch/${u}`,
   ];
-  for(const r of routes){
+  for(const p of proxies){
     try{
-      const res=await fetch(r,{cache:'no-store'});
+      const ctl=new AbortController(); const to=setTimeout(()=>ctl.abort(), timeoutMs);
+      const res=await fetch(p(url),{cache:'no-store', signal:ctl.signal});
+      clearTimeout(to);
       if(!res.ok) continue;
-      const j=await res.json();
-      const R=j?.chart?.result?.[0];
-      if(R?.timestamp) return R;
+      const t=await res.text();
+      if(t && t.length>20) return t;
     }catch(e){}
   }
   return null;
@@ -264,6 +266,34 @@ function toRows(R){
   const q=R.indicators.quote[0], ts=R.timestamp;
   return ts.map((t,i)=>({t, o:q.open[i], h:q.high[i], l:q.low[i], c:q.close[i], v:q.volume[i]}))
            .filter(x=>x.c!=null && x.h!=null && x.l!=null);
+}
+// Yahoo Finance（分足現在値つき）
+async function fetchYahoo(code){
+  const u=`https://query1.finance.yahoo.com/v8/finance/chart/${code}.T?range=1y&interval=1d`;
+  const t=await proxiedText(u);
+  if(!t) return null;
+  try{
+    const R=JSON.parse(t)?.chart?.result?.[0];
+    if(R?.timestamp){ const rows=toRows(R); if(rows.length>=30) return {rows, meta:R.meta, src:'Yahoo'}; }
+  }catch(e){}
+  return null;
+}
+// Stooq（日足CSV・Yahoo失敗時の予備データ源）
+async function fetchStooq(code){
+  const u=`https://stooq.com/q/d/l/?s=${code}.jp&i=d`;
+  const t=await proxiedText(u);
+  if(!t || !/^date/i.test(t.trim())) return null;
+  const rows=t.trim().split(/\r?\n/).slice(1).map(l=>{
+    const [d,o,h,lo,c,v]=l.split(',');
+    return {t:Math.floor(Date.parse(d)/1000), o:+o, h:+h, l:+lo, c:+c, v:+v};
+  }).filter(r=>r.c>0 && r.h>0 && r.l>0);
+  if(rows.length<30) return null;
+  const last=rows[rows.length-1], prev=rows[rows.length-2];
+  return {rows, meta:{regularMarketPrice:last.c, previousClose:prev.c, shortName:code, symbol:code, regularMarketTime:last.t}, src:'Stooq'};
+}
+// Yahoo→Stooq の順で取得
+async function fetchData(code){
+  return (await fetchYahoo(code)) || (await fetchStooq(code));
 }
 
 // ================= 指標まとめ =================
@@ -309,13 +339,13 @@ async function run(){
   const code=(document.getElementById('code').value||'').trim();
   if(!/^\d{4}$/.test(code)){ showErr('4桁の銘柄コードを入れてください（例: 7203）'); return; }
   showErr(''); document.getElementById('load').style.display='block';
-  const R=await fetchYahoo(code);
+  const D=await fetchData(code);
   document.getElementById('load').style.display='none';
-  if(!R){
-    showErr('自動取得に失敗しました（通信制限やCORSの可能性）。下の「手動で現在値を入れる」をお使いください。');
+  if(!D){
+    showErr('自動取得に失敗しました（Yahoo・Stooq とも到達不可）。回線を変える／少し待つで直ることがあります。今すぐ使うなら下の「手動で現在値を入れる」を。');
     document.getElementById('manual-wrap').open=true; return;
   }
-  lastData={code, name:R.meta.shortName||R.meta.symbol, rows:toRows(R), meta:R.meta};
+  lastData={code, name:D.meta.shortName||D.meta.symbol, rows:D.rows, meta:D.meta, src:D.src};
   render(lastData);
 }
 
@@ -372,7 +402,7 @@ function render(d){
   document.getElementById('verdict').innerHTML=`${tag(cls,'総合')}${v}`;
 
   const dt=new Date((d.meta.regularMarketTime||d.rows[d.rows.length-1].t)*1000);
-  document.getElementById('asof').textContent=`データ基準: ${dt.toLocaleString('ja-JP')} ／ 直近${d.rows.length}営業日`;
+  document.getElementById('asof').textContent=`データ源: ${d.src||'—'} ／ 基準: ${dt.toLocaleString('ja-JP')} ／ 直近${d.rows.length}営業日`;
 
   drawChart(m.closes, m.sl, m.tp, m.px);
 }
@@ -482,10 +512,10 @@ function renderWatchList(){
 async function refreshWatch(){
   const w=getWatch();
   for(const c of w){
-    const R=await fetchYahoo(c);
-    if(!R){ setTxt(`wp-${c}`,'取得失敗'); setTxt(`wt-${c}`,''); continue; }
-    const name=R.meta.shortName||R.meta.symbol;
-    const m=computeMetrics(toRows(R), R.meta, curStyle);
+    const D=await fetchData(c);
+    if(!D){ setTxt(`wp-${c}`,'取得失敗'); setTxt(`wt-${c}`,''); continue; }
+    const name=D.meta.shortName||D.meta.symbol;
+    const m=computeMetrics(D.rows, D.meta, curStyle);
     setTxt(`wn-${c}`, name);
     setTxt(`wp-${c}`, fmt(m.px)+'円');
     const g=document.getElementById(`wg-${c}`);
