@@ -77,6 +77,18 @@
   .wrow .del{color:var(--mut); background:none; border:0; font-size:18px; padding:2px 4px}
   .wrow .tags{min-width:70px; text-align:right}
   .empty{color:var(--mut); font-size:13px; text-align:center; padding:16px}
+  /* 検索候補 */
+  .searchwrap{position:relative}
+  .sug{position:absolute; left:0; right:0; top:100%; z-index:30; background:var(--card2);
+    border:1px solid var(--acc); border-radius:10px; margin-top:6px; max-height:280px; overflow-y:auto; display:none;
+    box-shadow:0 8px 24px rgba(0,0,0,.4)}
+  .sug.on{display:block}
+  .sug .it{padding:11px 12px; border-bottom:1px solid var(--line); cursor:pointer; display:flex; align-items:center; gap:10px}
+  .sug .it:last-child{border:0}
+  .sug .it:active,.sug .it.hl{background:var(--card)}
+  .sug .it .cd{color:var(--acc); font-weight:700; min-width:46px}
+  .sug .it .nm{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .sug .none{padding:11px 12px; color:var(--mut); font-size:13px}
 </style>
 </head>
 <body>
@@ -92,10 +104,14 @@
 <!-- ============ 詳細タブ ============ -->
 <div id="view-d">
   <div class="card">
-    <label>銘柄コード（例: 7203 トヨタ / 9984 ソフトバンクG / 6758 ソニー）</label>
-    <div class="row">
-      <input id="code" inputmode="numeric" placeholder="7203" value="7203">
-      <button class="btn" style="width:96px;margin:0" onclick="run()">実行</button>
+    <label>銘柄コード or 銘柄名で検索（例: 7203 / トヨタ / ソニー / 信越）</label>
+    <div class="searchwrap">
+      <div class="row">
+        <input id="code" autocomplete="off" placeholder="7203 または トヨタ" value="7203"
+               oninput="onSearch()" onfocus="onSearch()" onkeydown="sugKey(event)">
+        <button class="btn" style="width:96px;margin:0" onclick="run()">実行</button>
+      </div>
+      <div id="sug" class="sug"></div>
     </div>
 
     <div style="margin-top:12px">
@@ -209,7 +225,75 @@
   投資は自己責任です。データは Yahoo Finance 等の公開情報で、遅延・欠損の可能性があります。
 </div>
 
+<script src="stocks.js"></script>
 <script>
+// ================= 銘柄名 検索/表示 =================
+const STOCKS = window.STOCKS || {};
+// 全角英数→半角・ひらがな→カタカナ・小文字化（検索の揺れ吸収）
+function norm(s){
+  return (s||'')
+    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0))
+    .replace(/[ぁ-ゖ]/g, c=>String.fromCharCode(c.charCodeAt(0)+0x60))
+    .toLowerCase();
+}
+const STOCK_ARR = Object.keys(STOCKS).map(c=>({c, n:STOCKS[c], nn:norm(STOCKS[c])}));
+const jpName = c => STOCKS[c] || null;
+function searchStocks(q){
+  q=(q||'').trim(); if(!q) return [];
+  const nq=norm(q);
+  if(/^\d+$/.test(q)){ // 数字→コード前方一致
+    return STOCK_ARR.filter(s=>s.c.startsWith(q)).slice(0,14);
+  }
+  const pre=[], inc=[];
+  for(const s of STOCK_ARR){
+    const i=s.nn.indexOf(nq);
+    if(i===0) pre.push(s); else if(i>0) inc.push(s);
+    if(pre.length>=14) break;
+  }
+  return pre.concat(inc).slice(0,14);
+}
+let sugList=[], sugHl=-1;
+function onSearch(){
+  const q=document.getElementById('code').value;
+  const box=document.getElementById('sug');
+  // 4桁コードちょうどなら候補を隠す
+  if(/^\d{4}$/.test(q.trim()) && STOCKS[q.trim()]){ box.classList.remove('on'); return; }
+  sugList=searchStocks(q); sugHl=-1;
+  if(!q.trim() || !sugList.length){ box.classList.remove('on'); box.innerHTML=''; return; }
+  box.innerHTML=sugList.map((s,i)=>`<div class="it" data-i="${i}" onclick="pickSug(${i})"><span class="cd">${s.c}</span><span class="nm">${s.n}</span></div>`).join('');
+  box.classList.add('on');
+}
+function pickSug(i){
+  const s=sugList[i]; if(!s) return;
+  document.getElementById('code').value=s.c;
+  document.getElementById('sug').classList.remove('on');
+  run();
+}
+function sugKey(e){
+  const box=document.getElementById('sug');
+  if(!box.classList.contains('on')){ if(e.key==='Enter') run(); return; }
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+    e.preventDefault();
+    sugHl += e.key==='ArrowDown'?1:-1;
+    if(sugHl<0)sugHl=sugList.length-1; if(sugHl>=sugList.length)sugHl=0;
+    [...box.children].forEach((el,i)=>el.classList.toggle('hl',i===sugHl));
+  } else if(e.key==='Enter'){
+    e.preventDefault();
+    if(sugHl>=0) pickSug(sugHl); else run();
+  } else if(e.key==='Escape'){ box.classList.remove('on'); }
+}
+// 入力欄の外をタップで候補を閉じる
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.searchwrap')) document.getElementById('sug')?.classList.remove('on');
+});
+// コード or 名前入力を4桁コードへ解決
+function resolveCode(){
+  const v=(document.getElementById('code').value||'').trim();
+  if(/^\d{4}$/.test(v)) return v;
+  const hit=searchStocks(v)[0];
+  return hit?hit.c:null;
+}
+
 // ================= 指標 =================
 const avg=(a)=>a.reduce((x,y)=>x+y,0)/a.length;
 const sma=(a,n)=>a.length<n?null:avg(a.slice(-n));
@@ -365,8 +449,10 @@ function computeMetrics(rows, meta, styleKey){
 // ================= 詳細描画 =================
 let lastData=null;
 async function run(){
-  const code=(document.getElementById('code').value||'').trim();
-  if(!/^\d{4}$/.test(code)){ showErr('4桁の銘柄コードを入れてください（例: 7203）'); return; }
+  document.getElementById('sug')?.classList.remove('on');
+  const code=resolveCode();
+  if(!code){ showErr('銘柄が見つかりません。4桁コード（例 7203）か銘柄名（例 トヨタ）で入力してください。'); return; }
+  document.getElementById('code').value=code;
   showErr(''); document.getElementById('load').style.display='block';
   const D=await fetchData(code);
   document.getElementById('load').style.display='none';
@@ -374,7 +460,7 @@ async function run(){
     showErr('自動取得に失敗しました（Yahoo・Stooq とも到達不可）。回線を変える／少し待つで直ることがあります。今すぐ使うなら下の「手動で現在値を入れる」を。');
     document.getElementById('manual-wrap').open=true; return;
   }
-  lastData={code, name:D.meta.shortName||D.meta.symbol, rows:D.rows, meta:D.meta, src:D.src};
+  lastData={code, name:jpName(code)||D.meta.shortName||D.meta.symbol, rows:D.rows, meta:D.meta, src:D.src};
   render(lastData);
 }
 
@@ -530,7 +616,7 @@ function renderWatchList(){
   box.innerHTML = w.map(c=>`
     <div class="wrow" id="w-${c}">
       <div class="nm" onclick="loadFromWatch('${c}')">
-        <div class="c">${c}</div><div class="s" id="wn-${c}">タップで詳細</div>
+        <div class="c">${c}</div><div class="s" id="wn-${c}">${jpName(c)||'タップで詳細'}</div>
       </div>
       <div class="tags" id="wt-${c}"><span class="tag flat">…</span></div>
       <div class="pr"><div class="p" id="wp-${c}">—</div><div class="g" id="wg-${c}"></div></div>
@@ -543,7 +629,7 @@ async function refreshWatch(){
   for(const c of w){
     const D=await fetchData(c);
     if(!D){ setTxt(`wp-${c}`,'取得失敗'); setTxt(`wt-${c}`,''); continue; }
-    const name=D.meta.shortName||D.meta.symbol;
+    const name=jpName(c)||D.meta.shortName||D.meta.symbol;
     const m=computeMetrics(D.rows, D.meta, curStyle);
     setTxt(`wn-${c}`, name);
     setTxt(`wp-${c}`, fmt(m.px)+'円');
