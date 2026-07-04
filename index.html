@@ -322,8 +322,15 @@ async function fetchData(code){
 function computeMetrics(rows, meta, styleKey){
   const S=STYLE[styleKey];
   const closes=rows.map(r=>r.c), highs=rows.map(r=>r.h), lows=rows.map(r=>r.l), vols=rows.map(r=>r.v||0);
-  const px=meta.regularMarketPrice ?? closes[closes.length-1];
-  const prev=meta.previousClose ?? meta.chartPreviousClose ?? closes[closes.length-2];
+  const lastRow=rows[rows.length-1];
+  const px=meta.regularMarketPrice ?? lastRow.c;
+  // 前日終値: metaのchartPreviousCloseは範囲起点(=約1年前)で誤るため日足系列から算出。
+  // 最終足が「当日」なら前日=最後から2番目、当日足が未収録なら最終足が前日。
+  let prev;
+  const lastDay=new Date(lastRow.t*1000).toDateString();
+  const nowDay=new Date((meta.regularMarketTime||lastRow.t)*1000).toDateString();
+  if(lastDay===nowDay && closes.length>=2) prev=closes[closes.length-2];
+  else prev=lastRow.c;
   const chg=px-prev, chgp=prev?chg/prev*100:0;
 
   const sma5=sma(closes,5), sma25=sma(closes,25), sma75=sma(closes,75), sma200=sma(closes,200);
