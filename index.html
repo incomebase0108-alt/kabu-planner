@@ -89,6 +89,18 @@
   .sug .it .cd{color:var(--acc); font-weight:700; min-width:46px}
   .sug .it .nm{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
   .sug .none{padding:11px 12px; color:var(--mut); font-size:13px}
+  /* トグルスイッチ */
+  .sw{position:relative; display:inline-block; width:50px; height:28px}
+  .sw input{opacity:0; width:0; height:0}
+  .sw .sl{position:absolute; inset:0; background:var(--line); border-radius:999px; transition:.2s}
+  .sw .sl:before{content:""; position:absolute; height:22px; width:22px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.2s}
+  .sw input:checked + .sl{background:var(--up)}
+  .sw input:checked + .sl:before{transform:translateX(22px)}
+  .hrow .st{min-width:74px; text-align:right; font-size:11px}
+  .hrow .pl{font-weight:800; font-size:14px}
+  .alertbar{background:rgba(240,97,109,.15); border:1px solid var(--down); color:var(--down);
+    border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:13px; font-weight:700; display:none}
+  .alertbar.on{display:block}
 </style>
 </head>
 <body>
@@ -98,7 +110,8 @@
 
 <div class="tabs">
   <button id="tab-d" class="on" onclick="tab('d')">詳細</button>
-  <button id="tab-w" onclick="tab('w')">⭐ ウォッチリスト</button>
+  <button id="tab-w" onclick="tab('w')">⭐監視</button>
+  <button id="tab-h" onclick="tab('h')">💼保有</button>
 </div>
 
 <!-- ============ 詳細タブ ============ -->
@@ -220,8 +233,41 @@
   <div id="wlist"></div>
 </div>
 
+<!-- ============ 保有タブ ============ -->
+<div id="view-h" class="hide">
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px">
+      <div><b>売りアラート</b><div class="hint" style="margin:2px 0 0">条件到達で通知（ページを開いている間のみ）</div></div>
+      <label class="sw"><input type="checkbox" id="alertSw" onchange="toggleAlerts()"><span class="sl"></span></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <label>保有銘柄を登録（コード/名前・買値は必須、他は任意）</label>
+    <div class="searchwrap">
+      <div class="row"><input id="hcode" autocomplete="off" placeholder="コード or 名前（例 7203 / トヨタ）" oninput="onSearchH()" onkeydown="if(event.key==='Enter'){document.getElementById('hsug').classList.remove('on')}"></div>
+      <div id="hsug" class="sug"></div>
+    </div>
+    <div class="adv" style="grid-template-columns:1fr 1fr 1fr; margin-top:8px">
+      <div><label>買値 *</label><input id="hentry" inputmode="decimal" placeholder="2500"></div>
+      <div><label>株数(任意)</label><input id="hqty" inputmode="numeric" placeholder="100"></div>
+      <div><label>売り目標(任意)</label><input id="htp" inputmode="decimal" placeholder="自動"></div>
+    </div>
+    <div class="adv" style="grid-template-columns:1fr 2fr; margin-top:8px">
+      <div><label>損切り(任意)</label><input id="hsl" inputmode="decimal" placeholder="自動"></div>
+      <div style="display:flex; align-items:flex-end"><button class="btn" style="margin:0" onclick="addHold()">＋ 保有に登録</button></div>
+    </div>
+    <div class="hint">目標・損切りが空なら、買値とスタイル（短期/中期/長期）から自動設定します。</div>
+    <button class="btn ghost sm" style="width:100%; margin-top:10px" onclick="refreshHolds()">🔄 損益・アラートを更新</button>
+  </div>
+
+  <div id="alertBar" class="alertbar"></div>
+  <div id="hlist"></div>
+</div>
+
 <div class="disc">
   ⚠️ 過去の株価から機械計算した「目安」を表示するだけで、値上がり・利益を保証しません。
+  株価は約15〜20分遅延（リアルタイムではありません）。アラートはページを開いている間のみ動作します。
   投資は自己責任です。データは Yahoo Finance 等の公開情報で、遅延・欠損の可能性があります。
 </div>
 
@@ -287,12 +333,23 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('.searchwrap')) document.getElementById('sug')?.classList.remove('on');
 });
 // コード or 名前入力を4桁コードへ解決
-function resolveCode(){
-  const v=(document.getElementById('code').value||'').trim();
+function resolveCodeStr(v){
+  v=(v||'').trim();
   if(/^\d{4}$/.test(v)) return v;
   const hit=searchStocks(v)[0];
   return hit?hit.c:null;
 }
+function resolveCode(){ return resolveCodeStr(document.getElementById('code').value); }
+// 保有登録欄のサジェスト
+function onSearchH(){
+  const q=document.getElementById('hcode').value;
+  const box=document.getElementById('hsug');
+  const list=searchStocks(q);
+  if(!q.trim() || !list.length){ box.classList.remove('on'); box.innerHTML=''; return; }
+  box.innerHTML=list.map(s=>`<div class="it" onclick="pickSugH('${s.c}')"><span class="cd">${s.c}</span><span class="nm">${s.n}</span></div>`).join('');
+  box.classList.add('on');
+}
+function pickSugH(c){ document.getElementById('hcode').value=c; document.getElementById('hsug').classList.remove('on'); }
 
 // ================= 指標 =================
 const avg=(a)=>a.reduce((x,y)=>x+y,0)/a.length;
@@ -588,11 +645,12 @@ function drawChart(closes, sl, tp, px){
 
 // ================= タブ =================
 function tab(t){
-  document.getElementById('view-d').classList.toggle('hide', t!=='d');
-  document.getElementById('view-w').classList.toggle('hide', t!=='w');
-  document.getElementById('tab-d').classList.toggle('on', t==='d');
-  document.getElementById('tab-w').classList.toggle('on', t==='w');
+  for(const k of ['d','w','h']){
+    document.getElementById('view-'+k).classList.toggle('hide', t!==k);
+    document.getElementById('tab-'+k).classList.toggle('on', t===k);
+  }
   if(t==='w') renderWatchList();
+  if(t==='h') renderHolds();
 }
 
 // ================= ウォッチリスト =================
@@ -686,6 +744,98 @@ async function diag(){
 }
 // 起動時：保存済みプロキシURLを入力欄へ
 (function(){ const p=localStorage.getItem('toushi_proxy'); const el=document.getElementById('proxyUrl'); if(p&&el) el.value=p; })();
+
+// ================= 保有・売りアラート =================
+const HKEY='toushi_holds', AKEY='toushi_alerts';
+const getHolds=()=>{ try{return JSON.parse(localStorage.getItem(HKEY))||[]}catch(e){return[]} };
+const setHolds=a=>localStorage.setItem(HKEY, JSON.stringify(a));
+const alertsEnabled=()=>localStorage.getItem(AKEY)!=='0'; // 既定ON
+
+function toggleAlerts(){
+  const on=document.getElementById('alertSw').checked;
+  localStorage.setItem(AKEY, on?'1':'0');
+  if(on && 'Notification' in window && Notification.permission==='default') Notification.requestPermission();
+  refreshHolds();
+}
+function addHold(){
+  const code=resolveCodeStr(document.getElementById('hcode').value);
+  const entry=parseFloat(document.getElementById('hentry').value);
+  if(!code){ alert('銘柄が見つかりません（コードか名前で入力）'); return; }
+  if(!(entry>0)){ alert('買値を入れてください'); return; }
+  const qty=parseFloat(document.getElementById('hqty').value)||null;
+  const tp=parseFloat(document.getElementById('htp').value)||null;
+  const sl=parseFloat(document.getElementById('hsl').value)||null;
+  const h=getHolds().filter(x=>x.code!==code);
+  h.push({code, entry, qty, tp, sl, on:true});
+  setHolds(h);
+  ['hcode','hentry','hqty','htp','hsl'].forEach(id=>document.getElementById(id).value='');
+  renderHolds();
+}
+function delHold(c){ setHolds(getHolds().filter(x=>x.code!==c)); renderHolds(); }
+function toggleHold(c){
+  const h=getHolds(); const x=h.find(v=>v.code===c); if(x){ x.on=!x.on; setHolds(h); } refreshHolds();
+}
+// 目標・損切りの実効値（未設定なら買値とスタイルから自動）
+function effTargets(h){
+  const S=STYLE[curStyle];
+  const def={short:3,swing:5,long:8}[curStyle];
+  const sl = h.sl>0 ? h.sl : h.entry*(1-def/100);
+  const tp = h.tp>0 ? h.tp : h.entry*(1+def*S.rr/100);
+  return {tp, sl};
+}
+function renderHolds(){
+  document.getElementById('alertSw').checked=alertsEnabled();
+  const h=getHolds(), box=document.getElementById('hlist');
+  if(!h.length){ box.innerHTML='<div class="card empty">保有銘柄がありません。上で登録してください。</div>'; document.getElementById('alertBar').classList.remove('on'); return; }
+  box.innerHTML=h.map(x=>`
+    <div class="wrow hrow" id="h-${x.code}">
+      <div class="nm" onclick="loadFromWatch('${x.code}')">
+        <div class="c">${jpName(x.code)||x.code}</div>
+        <div class="s">買値 ${fmt(x.entry)}${x.qty?` ×${x.qty}株`:''}</div>
+      </div>
+      <div class="st" id="hst-${x.code}"><span class="tag flat">…</span></div>
+      <div class="pr"><div class="p" id="hpx-${x.code}">—</div><div class="pl" id="hpl-${x.code}"></div></div>
+      <label class="sw" style="transform:scale(.7)"><input type="checkbox" ${x.on?'checked':''} onchange="toggleHold('${x.code}')"><span class="sl"></span></label>
+      <button class="del" onclick="delHold('${x.code}')">✕</button>
+    </div>`).join('');
+  refreshHolds();
+}
+async function refreshHolds(){
+  const h=getHolds(); if(!h.length) return;
+  const fired=[];
+  for(const x of h){
+    const D=await fetchData(x.code);
+    if(!D){ setTxt(`hpx-${x.code}`,'取得失敗'); continue; }
+    const m=computeMetrics(D.rows, D.meta, curStyle);
+    const {tp,sl}=effTargets(x);
+    setTxt(`hpx-${x.code}`, fmt(m.px)+'円');
+    const plp=(m.px-x.entry)/x.entry*100;
+    const plEl=document.getElementById(`hpl-${x.code}`);
+    if(plEl){
+      const yen=x.qty?`  ${plp>=0?'+':''}${Math.round((m.px-x.entry)*x.qty).toLocaleString()}円`:'';
+      plEl.textContent=`${plp>=0?'+':''}${plp.toFixed(1)}%${yen}`;
+      plEl.style.color=plp>=0?'var(--up)':'var(--down)';
+    }
+    // 判定
+    let st, sev=0;
+    if(m.px>=tp){ st=tag('up','🎯利確目標 売り検討'); sev=2; }
+    else if(m.px<=sl){ st=tag('dc','🛑損切りライン 売り検討'); sev=2; }
+    else if(m.cross?.type==='dc'||m.shortDn){ st=tag('down','⚠トレンド悪化'); sev=1; }
+    else if(m.rsi>=75){ st=tag('warn','過熱(利確検討)'); sev=1; }
+    else { st=tag('flat','✅継続'); }
+    setHtml(`hst-${x.code}`, st);
+    if(sev>=2 && x.on && alertsEnabled()) fired.push({code:x.code, name:jpName(x.code)||x.code, px:m.px, tp, sl, up:m.px>=tp});
+  }
+  // アラート表示＋通知
+  const bar=document.getElementById('alertBar');
+  if(fired.length){
+    bar.innerHTML='🔔 売りシグナル: '+fired.map(f=>`${f.name}（${fmt(f.px)}円 ${f.up?'利確到達':'損切り到達'}）`).join(' / ');
+    bar.classList.add('on');
+    if('Notification' in window && Notification.permission==='granted'){
+      fired.forEach(f=>{ try{ new Notification('売りシグナル: '+f.name, {body:`${fmt(f.px)}円 — ${f.up?'利確目標到達':'損切りライン到達'}`}); }catch(e){} });
+    }
+  } else { bar.classList.remove('on'); }
+}
 </script>
 </body>
 </html>
