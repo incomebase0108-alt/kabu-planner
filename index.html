@@ -170,6 +170,21 @@
       <button class="btn ghost" style="margin-top:10px" onclick="runManual()">手動で計算</button>
     </details>
   </div>
+
+  <div class="card">
+    <details id="conn-wrap">
+      <summary>⚙️ 接続設定・診断（取得失敗する人向け）</summary>
+      <div class="hint">「取得失敗」が続く時はここ。① まず診断でどの経路が生きているか確認 ② 全滅なら自前プロキシ（Cloudflare Worker）URLを入れると確実に直ります。</div>
+      <button class="btn ghost" style="margin-top:10px" onclick="diag()">🔧 接続診断を実行</button>
+      <pre id="diagOut" style="white-space:pre-wrap; font-size:12px; color:var(--mut); background:var(--card2); border:1px solid var(--line); border-radius:8px; padding:10px; margin-top:8px; overflow-x:auto"></pre>
+      <label style="margin-top:8px">自前プロキシURL（例: https://xxx.workers.dev）</label>
+      <div class="row">
+        <input id="proxyUrl" placeholder="https://xxx.workers.dev">
+        <button class="btn sm" style="width:80px" onclick="saveProxy()">保存</button>
+      </div>
+      <div class="hint">設定すると最優先で使います。空にして保存でクリア。作り方は付属の説明を参照。</div>
+    </details>
+  </div>
 </div>
 
 <!-- ============ ウォッチリストタブ ============ -->
@@ -242,14 +257,21 @@ document.querySelectorAll('#style button').forEach(b=>b.onclick=()=>{
 
 // ================= データ取得 =================
 // 複数のCORSプロキシを順に試し、生テキストを返す
-async function proxiedText(url, timeoutMs=9000){
-  const proxies=[
+function proxyRoutes(){
+  const custom=(localStorage.getItem('toushi_proxy')||'').trim();
+  const list=[];
+  if(custom) list.push(u=>`${custom}${custom.includes('?')?'&':'?'}url=${encodeURIComponent(u)}`);
+  list.push(
     u=>`https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`,
     u=>`https://corsproxy.io/?url=${encodeURIComponent(u)}`,
     u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
     u=>u, // 直接（端末によっては通る）
     u=>`https://thingproxy.freeboard.io/fetch/${u}`,
-  ];
+  );
+  return list;
+}
+async function proxiedText(url, timeoutMs=9000){
+  const proxies=proxyRoutes();
   for(const p of proxies){
     try{
       const ctl=new AbortController(); const to=setTimeout(()=>ctl.abort(), timeoutMs);
@@ -534,6 +556,43 @@ function loadFromWatch(c){
 }
 const setTxt=(id,t)=>{const e=document.getElementById(id); if(e)e.textContent=t;};
 const setHtml=(id,h)=>{const e=document.getElementById(id); if(e)e.innerHTML=h;};
+
+// ================= 接続設定・診断 =================
+function saveProxy(){
+  const v=(document.getElementById('proxyUrl').value||'').trim();
+  if(v){ localStorage.setItem('toushi_proxy', v); alert('保存しました。以後この経路を最優先で使います。'); }
+  else { localStorage.removeItem('toushi_proxy'); alert('クリアしました。'); }
+}
+async function diag(){
+  const box=document.getElementById('diagOut'); box.textContent='診断中…（各経路を順にテスト）';
+  const u='https://query1.finance.yahoo.com/v8/finance/chart/7203.T?range=5d&interval=1d';
+  const custom=(localStorage.getItem('toushi_proxy')||'').trim();
+  const routes=[];
+  if(custom) routes.push(['自前Worker', `${custom}${custom.includes('?')?'&':'?'}url=${encodeURIComponent(u)}`]);
+  routes.push(
+    ['codetabs', `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`],
+    ['corsproxy', `https://corsproxy.io/?url=${encodeURIComponent(u)}`],
+    ['allorigins', `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`],
+    ['直接', u],
+    ['thingproxy', `https://thingproxy.freeboard.io/fetch/${u}`],
+  );
+  const lines=[];
+  for(const [name,r] of routes){
+    try{
+      const ctl=new AbortController(); const to=setTimeout(()=>ctl.abort(),9000);
+      const res=await fetch(r,{cache:'no-store', signal:ctl.signal}); clearTimeout(to);
+      const t=await res.text();
+      const ok=t.includes('timestamp')||t.includes('"chart"');
+      lines.push(`${ok?'✅':'⚠️'} ${name}: HTTP ${res.status} / ${t.length}B${ok?' → 取得成功':' → 中身なし'}`);
+    }catch(e){ lines.push(`❌ ${name}: ${e.name==='AbortError'?'タイムアウト':(e.message||'接続失敗')}`); }
+    box.textContent=lines.join('\n');
+  }
+  const anyOk=lines.some(l=>l.startsWith('✅'));
+  lines.push(anyOk ? '— ✅がある経路は生きています。もう一度「実行」してみて —' : '— 全滅です。自前Worker(下の説明)を立てて下さい —');
+  box.textContent=lines.join('\n');
+}
+// 起動時：保存済みプロキシURLを入力欄へ
+(function(){ const p=localStorage.getItem('toushi_proxy'); const el=document.getElementById('proxyUrl'); if(p&&el) el.value=p; })();
 </script>
 </body>
 </html>
