@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>日本株 売買プランナー</title>
+<style>
+  :root{
+    --bg:#0e1116; --card:#171b22; --card2:#1e2530; --line:#2a323f;
+    --tx:#e6edf3; --mut:#8b98a9; --acc:#3b82f6;
+    --up:#16c784; --down:#f0616d; --warn:#f5a623;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  body{margin:0; background:var(--bg); color:var(--tx);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
+    line-height:1.5; padding:14px; max-width:600px; margin:0 auto; font-size:15px}
+  h1{font-size:19px; margin:2px 0 2px}
+  .sub{color:var(--mut); font-size:12px; margin-bottom:12px}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:12px}
+  label{display:block; font-size:12px; color:var(--mut); margin-bottom:5px}
+  .row{display:flex; gap:8px}
+  input,select{width:100%; background:var(--card2); border:1px solid var(--line); color:var(--tx);
+    border-radius:10px; padding:11px 12px; font-size:16px; outline:none}
+  input:focus,select:focus{border-color:var(--acc)}
+  .seg{display:flex; background:var(--card2); border:1px solid var(--line); border-radius:10px; overflow:hidden}
+  .seg button{flex:1; background:transparent; border:0; color:var(--mut); padding:10px; font-size:14px; font-weight:600}
+  .seg button.on{background:var(--acc); color:#fff}
+  .tabs{display:flex; gap:8px; margin-bottom:12px}
+  .tabs button{flex:1; background:var(--card2); border:1px solid var(--line); color:var(--mut);
+    padding:11px; border-radius:10px; font-size:15px; font-weight:700}
+  .tabs button.on{background:var(--acc); color:#fff; border-color:var(--acc)}
+  .btn{width:100%; background:var(--acc); border:0; color:#fff; font-weight:700; font-size:16px;
+    padding:13px; border-radius:12px; margin-top:4px}
+  .btn:active{opacity:.85}
+  .btn.ghost{background:var(--card2); border:1px solid var(--line); color:var(--tx)}
+  .btn.sm{padding:9px; font-size:13px; margin:0; width:auto}
+  .price{font-size:34px; font-weight:800; letter-spacing:.5px}
+  .price small{font-size:14px; color:var(--mut); font-weight:600}
+  .chg{font-size:14px; font-weight:700}
+  .plan{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:6px}
+  .plan .cell{background:var(--card2); border:1px solid var(--line); border-radius:10px; padding:10px; text-align:center}
+  .plan .cell .k{font-size:11px; color:var(--mut)}
+  .plan .cell .v{font-size:18px; font-weight:800; margin-top:3px}
+  .plan .cell.buy .v{color:var(--acc)}
+  .plan .cell.tp .v{color:var(--up)}
+  .plan .cell.sl .v{color:var(--down)}
+  .tag{display:inline-block; font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px; margin:2px 4px 2px 0}
+  .tag.up{background:rgba(22,199,132,.15); color:var(--up)}
+  .tag.down{background:rgba(240,97,109,.15); color:var(--down)}
+  .tag.flat{background:rgba(139,152,169,.15); color:var(--mut)}
+  .tag.warn{background:rgba(245,166,35,.15); color:var(--warn)}
+  .tag.gc{background:rgba(22,199,132,.22); color:var(--up); border:1px solid rgba(22,199,132,.5)}
+  .tag.dc{background:rgba(240,97,109,.22); color:var(--down); border:1px solid rgba(240,97,109,.5)}
+  .verdict{font-size:14px; margin:8px 0 2px}
+  .verdict b{font-size:15px}
+  .kv{display:flex; justify-content:space-between; font-size:13px; padding:5px 0; border-bottom:1px dashed var(--line); gap:8px}
+  .kv:last-child{border:0}
+  .kv .mut{color:var(--mut); white-space:nowrap}
+  .kv .r{text-align:right}
+  canvas{width:100%; height:120px; display:block; margin-top:8px}
+  .hint{font-size:12px; color:var(--mut); margin-top:8px}
+  .err{color:var(--warn); font-size:13px; margin-top:8px; display:none}
+  .disc{font-size:11px; color:var(--mut); line-height:1.6; margin-top:8px}
+  details{margin-top:8px} summary{font-size:13px; color:var(--acc); cursor:pointer}
+  .adv{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px}
+  .hide{display:none}
+  .load{color:var(--acc); font-size:13px; margin-top:8px; display:none}
+  /* watchlist */
+  .wrow{display:flex; align-items:center; gap:10px; background:var(--card2); border:1px solid var(--line);
+    border-radius:10px; padding:10px 12px; margin-bottom:8px}
+  .wrow .nm{flex:1; min-width:0}
+  .wrow .nm .c{font-weight:700; font-size:15px}
+  .wrow .nm .s{font-size:11px; color:var(--mut); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .wrow .pr{text-align:right; min-width:96px}
+  .wrow .pr .p{font-weight:800; font-size:15px}
+  .wrow .pr .g{font-size:12px; font-weight:700}
+  .wrow .del{color:var(--mut); background:none; border:0; font-size:18px; padding:2px 4px}
+  .wrow .tags{min-width:70px; text-align:right}
+  .empty{color:var(--mut); font-size:13px; text-align:center; padding:16px}
+</style>
+</head>
+<body>
+
+<h1>📈 日本株 売買プランナー</h1>
+<div class="sub">現在値・トレンド・出来高・利確／損切りを表示。<b>売買指示ではなく判断の補助</b>です。</div>
+
+<div class="tabs">
+  <button id="tab-d" class="on" onclick="tab('d')">詳細</button>
+  <button id="tab-w" onclick="tab('w')">⭐ ウォッチリスト</button>
+</div>
+
+<!-- ============ 詳細タブ ============ -->
+<div id="view-d">
+  <div class="card">
+    <label>銘柄コード（例: 7203 トヨタ / 9984 ソフトバンクG / 6758 ソニー）</label>
+    <div class="row">
+      <input id="code" inputmode="numeric" placeholder="7203" value="7203">
+      <button class="btn" style="width:96px;margin:0" onclick="run()">実行</button>
+    </div>
+
+    <div style="margin-top:12px">
+      <label>スタイル（利確・損切りの幅が変わります）</label>
+      <div class="seg" id="style">
+        <button data-v="short" class="on">短期</button>
+        <button data-v="swing">中期</button>
+        <button data-v="long">長期</button>
+      </div>
+    </div>
+
+    <details>
+      <summary>リスク設定を調整</summary>
+      <div class="adv">
+        <div><label>1回の損切り幅（%）</label><input id="riskPct" inputmode="decimal" value="" placeholder="自動(ATR)"></div>
+        <div><label>リワード比（利確÷損切り）</label><input id="rr" inputmode="decimal" value=""></div>
+      </div>
+      <div class="hint">空欄なら値動きの大きさ（ATR）から自動で決めます。</div>
+    </details>
+
+    <div class="load" id="load">取得中…（弾かれたら自動で別ルートを試します）</div>
+    <div class="err" id="err"></div>
+  </div>
+
+  <div class="card hide" id="result">
+    <div style="display:flex; justify-content:space-between; align-items:flex-end">
+      <div>
+        <div id="name" style="font-size:13px; color:var(--mut)"></div>
+        <div class="price"><span id="px">—</span> <small>円</small></div>
+        <div class="chg" id="chg"></div>
+      </div>
+      <div style="text-align:right">
+        <div id="short-tag"></div>
+        <div id="long-tag" style="margin-top:4px"></div>
+        <div id="cross-tag" style="margin-top:4px"></div>
+      </div>
+    </div>
+
+    <canvas id="chart" width="560" height="120"></canvas>
+
+    <div class="plan">
+      <div class="cell buy"><div class="k">買い目安</div><div class="v" id="buy">—</div></div>
+      <div class="cell tp"><div class="k">利確（+）</div><div class="v" id="tp">—</div></div>
+      <div class="cell sl"><div class="k">損切り（−）</div><div class="v" id="sl">—</div></div>
+    </div>
+
+    <div class="verdict" id="verdict"></div>
+
+    <div style="margin-top:10px">
+      <div class="kv"><span class="mut">短期トレンド</span><span class="r" id="k-short"></span></div>
+      <div class="kv"><span class="mut">長期トレンド</span><span class="r" id="k-long"></span></div>
+      <div class="kv"><span class="mut">クロス</span><span class="r" id="k-cross"></span></div>
+      <div class="kv"><span class="mut">出来高</span><span class="r" id="k-vol"></span></div>
+      <div class="kv"><span class="mut">勢い RSI(14)</span><span class="r" id="k-rsi"></span></div>
+      <div class="kv"><span class="mut">値動き ATR(14)</span><span class="r" id="k-atr"></span></div>
+      <div class="kv"><span class="mut">リスク／リワード</span><span class="r" id="k-rr"></span></div>
+    </div>
+
+    <button class="btn ghost" id="addWatch" style="margin-top:12px" onclick="addToWatch()">⭐ この銘柄をウォッチリストに追加</button>
+    <div class="disc" id="asof"></div>
+  </div>
+
+  <div class="card">
+    <details id="manual-wrap">
+      <summary>自動取得が使えないとき（手動で現在値を入れる）</summary>
+      <div class="hint">現在値だけでも利確・損切りは計算できます（トレンド判定は簡易）。</div>
+      <div class="adv" style="grid-template-columns:1fr 1fr 1fr">
+        <div><label>現在値</label><input id="mPx" inputmode="decimal" placeholder="2850"></div>
+        <div><label>直近高値(任意)</label><input id="mHi" inputmode="decimal" placeholder="2900"></div>
+        <div><label>直近安値(任意)</label><input id="mLo" inputmode="decimal" placeholder="2700"></div>
+      </div>
+      <button class="btn ghost" style="margin-top:10px" onclick="runManual()">手動で計算</button>
+    </details>
+  </div>
+</div>
+
+<!-- ============ ウォッチリストタブ ============ -->
+<div id="view-w" class="hide">
+  <div class="card">
+    <label>銘柄コードを追加</label>
+    <div class="row">
+      <input id="wcode" inputmode="numeric" placeholder="6758">
+      <button class="btn sm" style="width:80px" onclick="addWatchCode()">＋追加</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn ghost sm" style="flex:1" onclick="refreshWatch()">🔄 全部更新</button>
+      <span style="flex:1"></span>
+    </div>
+    <div class="hint">スタイル（短期/中期/長期）は「詳細」タブの選択が反映されます。行をタップで詳細表示。</div>
+  </div>
+  <div id="wlist"></div>
+</div>
+
+<div class="disc">
+  ⚠️ 過去の株価から機械計算した「目安」を表示するだけで、値上がり・利益を保証しません。
+  投資は自己責任です。データは Yahoo Finance 等の公開情報で、遅延・欠損の可能性があります。
+</div>
+
+<script>
+// ================= 指標 =================
+const avg=(a)=>a.reduce((x,y)=>x+y,0)/a.length;
+const sma=(a,n)=>a.length<n?null:avg(a.slice(-n));
+function smaSeries(a,n){ return a.map((_,i)=> i<n-1?null:avg(a.slice(i-n+1,i+1))); }
+function rsi(c,n=14){
+  if(c.length<n+1)return null;
+  let g=0,l=0;
+  for(let i=c.length-n;i<c.length;i++){const d=c[i]-c[i-1]; d>=0?g+=d:l-=d;}
+  if(l===0)return 100;
+  const rs=(g/n)/(l/n); return 100-100/(1+rs);
+}
+function atr(h,l,c,n=14){
+  if(c.length<n+1)return null;
+  let s=0;
+  for(let i=c.length-n;i<c.length;i++){
+    s+=Math.max(h[i]-l[i], Math.abs(h[i]-c[i-1]), Math.abs(l[i]-c[i-1]));
+  }
+  return s/n;
+}
+// ゴールデン/デッドクロス検出（直近lookback日以内）
+function detectCross(c, nf, ns, look=7){
+  if(c.length<ns+1) return null;
+  const f=smaSeries(c,nf), s=smaSeries(c,ns);
+  for(let i=c.length-1; i>=Math.max(1,c.length-look); i--){
+    if(f[i]==null||s[i]==null||f[i-1]==null||s[i-1]==null) continue;
+    if(f[i-1]<=s[i-1] && f[i]>s[i]) return {type:'gc', ago:c.length-1-i};
+    if(f[i-1]>=s[i-1] && f[i]<s[i]) return {type:'dc', ago:c.length-1-i};
+  }
+  return null;
+}
+const fmt=x=> x==null?'—' : (Math.abs(x)>=1000? Math.round(x).toLocaleString() : x.toFixed(1));
+const tag=(k,t)=>`<span class="tag ${k}">${t}</span>`;
+
+// ================= スタイル =================
+const STYLE={
+  short:{atrK:1.2, rr:1.5, nf:5,  ns:25,  cf:5,  cs:25, label:'短期'},
+  swing:{atrK:1.8, rr:2.0, nf:25, ns:75,  cf:25, cs:75, label:'中期'},
+  long: {atrK:2.5, rr:2.5, nf:75, ns:200, cf:25, cs:75, label:'長期'},
+};
+let curStyle='short';
+document.querySelectorAll('#style button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#style button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); curStyle=b.dataset.v; if(lastData) render(lastData);
+});
+
+// ================= データ取得 =================
+async function fetchYahoo(code){
+  const u=`https://query1.finance.yahoo.com/v8/finance/chart/${code}.T?range=1y&interval=1d`;
+  const routes=[
+    u,
+    'https://corsproxy.io/?url='+encodeURIComponent(u),
+    'https://api.allorigins.win/raw?url='+encodeURIComponent(u),
+    'https://thingproxy.freeboard.io/fetch/'+u,
+  ];
+  for(const r of routes){
+    try{
+      const res=await fetch(r,{cache:'no-store'});
+      if(!res.ok) continue;
+      const j=await res.json();
+      const R=j?.chart?.result?.[0];
+      if(R?.timestamp) return R;
+    }catch(e){}
+  }
+  return null;
+}
+function toRows(R){
+  const q=R.indicators.quote[0], ts=R.timestamp;
+  return ts.map((t,i)=>({t, o:q.open[i], h:q.high[i], l:q.low[i], c:q.close[i], v:q.volume[i]}))
+           .filter(x=>x.c!=null && x.h!=null && x.l!=null);
+}
+
+// ================= 指標まとめ =================
+function computeMetrics(rows, meta, styleKey){
+  const S=STYLE[styleKey];
+  const closes=rows.map(r=>r.c), highs=rows.map(r=>r.h), lows=rows.map(r=>r.l), vols=rows.map(r=>r.v||0);
+  const px=meta.regularMarketPrice ?? closes[closes.length-1];
+  const prev=meta.previousClose ?? meta.chartPreviousClose ?? closes[closes.length-2];
+  const chg=px-prev, chgp=prev?chg/prev*100:0;
+
+  const sma5=sma(closes,5), sma25=sma(closes,25), sma75=sma(closes,75), sma200=sma(closes,200);
+  const r=rsi(closes,14), a=atr(highs,lows,closes,14);
+
+  // 出来高
+  const vAvg=sma(vols,25), vLast=vols[vols.length-1]||0;
+  const vRatio=vAvg?vLast/vAvg:null;
+
+  // クロス（スタイルの cf/cs で判定）
+  const cross=detectCross(closes, S.cf, S.cs, 7);
+
+  // トレンド
+  const shortUp = sma5!=null&&sma25!=null ? (px>sma5 && sma5>sma25) : (px>sma5);
+  const shortDn = sma5!=null&&sma25!=null ? (px<sma5 && sma5<sma25) : (px<sma5);
+  const longUp  = sma75!=null&&sma200!=null ? (sma75>sma200 && px>sma75) : (sma75!=null&&px>sma75);
+  const longDn  = sma75!=null&&sma200!=null ? (sma75<sma200 && px<sma75) : (sma75!=null&&px<sma75);
+
+  // 損切り幅
+  let riskPct=parseFloat(document.getElementById('riskPct').value);
+  let rr=parseFloat(document.getElementById('rr').value)||S.rr;
+  let stopDist;
+  if(riskPct>0){ stopDist=px*riskPct/100; }
+  else if(a){ stopDist=a*S.atrK; riskPct=stopDist/px*100; }
+  else { stopDist=px*0.03; riskPct=3; }
+  const sl=px-stopDist, tp=px+stopDist*rr, buy=px;
+
+  return {px,prev,chg,chgp,sma5,sma25,sma75,sma200,rsi:r,atr:a,vRatio,vLast,cross,
+          shortUp,shortDn,longUp,longDn,riskPct,rr,sl,tp,buy,closes};
+}
+
+// ================= 詳細描画 =================
+let lastData=null;
+async function run(){
+  const code=(document.getElementById('code').value||'').trim();
+  if(!/^\d{4}$/.test(code)){ showErr('4桁の銘柄コードを入れてください（例: 7203）'); return; }
+  showErr(''); document.getElementById('load').style.display='block';
+  const R=await fetchYahoo(code);
+  document.getElementById('load').style.display='none';
+  if(!R){
+    showErr('自動取得に失敗しました（通信制限やCORSの可能性）。下の「手動で現在値を入れる」をお使いください。');
+    document.getElementById('manual-wrap').open=true; return;
+  }
+  lastData={code, name:R.meta.shortName||R.meta.symbol, rows:toRows(R), meta:R.meta};
+  render(lastData);
+}
+
+function render(d){
+  const S=STYLE[curStyle];
+  const m=computeMetrics(d.rows, d.meta, curStyle);
+  document.getElementById('result').classList.remove('hide');
+  document.getElementById('name').textContent=`${d.name}（${d.code}）`;
+  document.getElementById('px').textContent=fmt(m.px);
+  const chgEl=document.getElementById('chg');
+  chgEl.textContent=`${m.chg>=0?'+':''}${m.chg.toFixed(1)}円 (${m.chgp>=0?'+':''}${m.chgp.toFixed(2)}%) 前日比`;
+  chgEl.style.color=m.chg>=0?'var(--up)':'var(--down)';
+
+  document.getElementById('buy').textContent=fmt(m.buy);
+  document.getElementById('tp').textContent=fmt(m.tp);
+  document.getElementById('sl').textContent=fmt(m.sl);
+
+  document.getElementById('short-tag').innerHTML=tag(m.shortUp?'up':m.shortDn?'down':'flat','短期 '+(m.shortUp?'上昇':m.shortDn?'下降':'もみ合い'));
+  document.getElementById('long-tag').innerHTML =tag(m.longUp?'up':m.longDn?'down':'flat','長期 '+(m.longUp?'上昇':m.longDn?'下降':'中立'));
+
+  // クロス表示
+  const crossHtml = m.cross ? tag(m.cross.type, (m.cross.type==='gc'?'GC ゴールデン':'DC デッド')+(m.cross.ago===0?'(本日)':`(${m.cross.ago}日前)`)) : '';
+  document.getElementById('cross-tag').innerHTML=crossHtml;
+  document.getElementById('k-cross').innerHTML = m.cross
+    ? tag(m.cross.type, m.cross.type==='gc'?`${S.cf}日線が${S.cs}日線を上抜け`:`${S.cf}日線が${S.cs}日線を下抜け`) + `<span class="mut">${m.cross.ago===0?'本日':m.cross.ago+'日前'}</span>`
+    : `<span class="mut">直近なし</span>`;
+
+  // 出来高
+  let volHtml='—';
+  if(m.vRatio!=null){
+    const vt = m.vRatio>=1.5?tag('up','急増'):m.vRatio>=1.2?tag('warn','やや増'):m.vRatio<=0.6?tag('flat','閑散'):tag('flat','平常');
+    volHtml = `${vt}<span class="mut">25日平均比 ×${m.vRatio.toFixed(2)}</span>`;
+  }
+  document.getElementById('k-vol').innerHTML=volHtml;
+
+  let rsiTxt=m.rsi==null?'—':m.rsi.toFixed(0);
+  let rsiTag=m.rsi==null?'':(m.rsi>=70?tag('warn','買われすぎ'):m.rsi<=30?tag('warn','売られすぎ'):tag('flat','中立'));
+  document.getElementById('k-rsi').innerHTML=`${rsiTxt} ${rsiTag}`;
+  document.getElementById('k-short').innerHTML=m.shortUp?tag('up','順張り○'):m.shortDn?tag('down','逆風'):tag('flat','様子見');
+  document.getElementById('k-long').innerHTML =m.longUp?tag('up','上昇基調'):m.longDn?tag('down','下降基調'):tag('flat','中立');
+  document.getElementById('k-atr').textContent=m.atr?`約${fmt(m.atr)}円/日`:'—';
+  document.getElementById('k-rr').textContent =`損-${m.riskPct.toFixed(1)}% / 利+${(m.riskPct*m.rr).toFixed(1)}%（1:${m.rr}）`;
+
+  // 総合
+  let v='', cls='flat'; const sn=S.label;
+  if(m.shortUp && (m.longUp||curStyle==='short')){ v=`${sn}目線では<b>上昇トレンドで順張りしやすい</b>形。押し目を待って買い、割れたら損切り徹底。`; cls='up'; }
+  else if(m.shortDn){ v=`${sn}目線では<b>下降トレンド</b>。無理な逆張りは避け、5日線回復を確認してからが無難。`; cls='down'; }
+  else{ v=`${sn}目線では<b>方向感が乏しい（もみ合い）</b>。ブレイク待ちかレンジ下限で拾う戦略。`; }
+  if(m.cross?.type==='gc') v+=' 直近で<b>ゴールデンクロス</b>が出て上向きの後押し。';
+  if(m.cross?.type==='dc') v+=' 直近で<b>デッドクロス</b>が出て弱含み、慎重に。';
+  if(m.vRatio>=1.5) v+=' 出来高急増で<b>注目度が高い</b>。';
+  if(m.rsi>=75) v+=' ただしRSI高く<b>過熱感</b>あり飛びつき注意。';
+  if(m.rsi<=25) v+=' RSI低く<b>反発狙い</b>の位置でもある。';
+  document.getElementById('verdict').innerHTML=`${tag(cls,'総合')}${v}`;
+
+  const dt=new Date((d.meta.regularMarketTime||d.rows[d.rows.length-1].t)*1000);
+  document.getElementById('asof').textContent=`データ基準: ${dt.toLocaleString('ja-JP')} ／ 直近${d.rows.length}営業日`;
+
+  drawChart(m.closes, m.sl, m.tp, m.px);
+}
+
+function showErr(msg){ const e=document.getElementById('err'); e.textContent=msg; e.style.display=msg?'block':'none'; }
+
+// ================= 手動 =================
+function runManual(){
+  const px=parseFloat(document.getElementById('mPx').value);
+  if(!(px>0)){ alert('現在値を入れてください'); return; }
+  const hi=parseFloat(document.getElementById('mHi').value), lo=parseFloat(document.getElementById('mLo').value);
+  const S=STYLE[curStyle];
+  let riskPct=parseFloat(document.getElementById('riskPct').value);
+  let rr=parseFloat(document.getElementById('rr').value)||S.rr, stopDist;
+  const defPct={short:3,swing:5,long:8}[curStyle];
+  if(riskPct>0) stopDist=px*riskPct/100;
+  else if(hi>0&&lo>0){ stopDist=(hi-lo)*0.5; riskPct=stopDist/px*100; }
+  else { stopDist=px*defPct/100; riskPct=defPct; }
+  const sl=px-stopDist, tp=px+stopDist*rr;
+  document.getElementById('result').classList.remove('hide');
+  document.getElementById('name').textContent='手動入力';
+  document.getElementById('px').textContent=fmt(px);
+  document.getElementById('chg').textContent='';
+  document.getElementById('buy').textContent=fmt(px);
+  document.getElementById('tp').textContent=fmt(tp);
+  document.getElementById('sl').textContent=fmt(sl);
+  let pos='';
+  if(hi>0&&lo>0){ const p=(px-lo)/(hi-lo); pos=p>0.7?tag('warn','高値圏'):p<0.3?tag('up','安値圏'):tag('flat','中間'); }
+  document.getElementById('short-tag').innerHTML=pos;
+  ['long-tag','cross-tag'].forEach(i=>document.getElementById(i).innerHTML='');
+  document.getElementById('verdict').innerHTML=`${tag('flat','手動')}現在値からの機械計算。損切り-${riskPct.toFixed(1)}% / 利確+${(riskPct*rr).toFixed(1)}%（1:${rr}）。トレンド・出来高判定には自動取得が必要です。`;
+  ['k-short','k-long','k-cross','k-vol','k-rsi'].forEach(id=>document.getElementById(id).textContent='—（手動）');
+  document.getElementById('k-atr').textContent='—';
+  document.getElementById('k-rr').textContent=`損-${riskPct.toFixed(1)}% / 利+${(riskPct*rr).toFixed(1)}%`;
+  document.getElementById('asof').textContent='手動入力ベース';
+  drawChart([lo||px,px,hi||px].filter(Boolean), sl, tp, px);
+}
+
+// ================= チャート =================
+function drawChart(closes, sl, tp, px){
+  const cv=document.getElementById('chart'), ctx=cv.getContext('2d');
+  const W=cv.width, H=cv.height, pad=6; ctx.clearRect(0,0,W,H);
+  if(closes.length<2) return;
+  const view=closes.slice(-120);
+  let mn=Math.min(...view, sl), mx=Math.max(...view, tp);
+  const span=(mx-mn)||1;
+  const X=i=>pad+(W-2*pad)*i/(view.length-1);
+  const Y=v=>pad+(H-2*pad)*(1-(v-mn)/span);
+  ctx.fillStyle='rgba(22,199,132,.08)'; ctx.fillRect(0,0,W,Y(tp));
+  ctx.fillStyle='rgba(240,97,109,.08)'; ctx.fillRect(0,Y(sl),W,H-Y(sl));
+  [[tp,'#16c784'],[sl,'#f0616d'],[px,'#8b98a9']].forEach(([v,c])=>{
+    ctx.strokeStyle=c; ctx.setLineDash([4,3]); ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(0,Y(v)); ctx.lineTo(W,Y(v)); ctx.stroke();
+  });
+  ctx.setLineDash([]);
+  [[25,'#f5a623'],[75,'#3b82f6']].forEach(([n,col])=>{
+    if(view.length<n) return;
+    const ser=smaSeries(view,n);
+    ctx.strokeStyle=col; ctx.lineWidth=1.2; ctx.beginPath(); let st=false;
+    ser.forEach((v,i)=>{ if(v==null)return; const x=X(i),y=Y(v); st?ctx.lineTo(x,y):(ctx.moveTo(x,y),st=true); });
+    ctx.stroke();
+  });
+  ctx.strokeStyle='#e6edf3'; ctx.lineWidth=1.6; ctx.beginPath();
+  view.forEach((v,i)=>{ const x=X(i),y=Y(v); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+  ctx.stroke();
+  ctx.fillStyle='#3b82f6'; ctx.beginPath(); ctx.arc(X(view.length-1),Y(view.at(-1)),3,0,7); ctx.fill();
+}
+
+// ================= タブ =================
+function tab(t){
+  document.getElementById('view-d').classList.toggle('hide', t!=='d');
+  document.getElementById('view-w').classList.toggle('hide', t!=='w');
+  document.getElementById('tab-d').classList.toggle('on', t==='d');
+  document.getElementById('tab-w').classList.toggle('on', t==='w');
+  if(t==='w') renderWatchList();
+}
+
+// ================= ウォッチリスト =================
+const WKEY='toushi_watch';
+const getWatch=()=>{ try{return JSON.parse(localStorage.getItem(WKEY))||[]}catch(e){return[]} };
+const setWatch=(a)=>localStorage.setItem(WKEY, JSON.stringify(a));
+function addToWatch(){ if(lastData) addWatchCode(lastData.code); }
+function addWatchCode(code){
+  code = (typeof code==='string' && /^\d{4}$/.test(code)) ? code : (document.getElementById('wcode').value||'').trim();
+  if(!/^\d{4}$/.test(code)){ alert('4桁の銘柄コードを入れてください'); return; }
+  const w=getWatch();
+  if(!w.includes(code)){ w.push(code); setWatch(w); }
+  document.getElementById('wcode').value='';
+  tab('w');
+}
+function delWatch(code){ setWatch(getWatch().filter(c=>c!==code)); renderWatchList(); }
+
+function renderWatchList(){
+  const w=getWatch(), box=document.getElementById('wlist');
+  if(!w.length){ box.innerHTML='<div class="card empty">まだありません。上でコードを追加するか、詳細画面の「⭐追加」から登録してください。</div>'; return; }
+  box.innerHTML = w.map(c=>`
+    <div class="wrow" id="w-${c}">
+      <div class="nm" onclick="loadFromWatch('${c}')">
+        <div class="c">${c}</div><div class="s" id="wn-${c}">タップで詳細</div>
+      </div>
+      <div class="tags" id="wt-${c}"><span class="tag flat">…</span></div>
+      <div class="pr"><div class="p" id="wp-${c}">—</div><div class="g" id="wg-${c}"></div></div>
+      <button class="del" onclick="delWatch('${c}')">✕</button>
+    </div>`).join('');
+  refreshWatch();
+}
+async function refreshWatch(){
+  const w=getWatch();
+  for(const c of w){
+    const R=await fetchYahoo(c);
+    if(!R){ setTxt(`wp-${c}`,'取得失敗'); setTxt(`wt-${c}`,''); continue; }
+    const name=R.meta.shortName||R.meta.symbol;
+    const m=computeMetrics(toRows(R), R.meta, curStyle);
+    setTxt(`wn-${c}`, name);
+    setTxt(`wp-${c}`, fmt(m.px)+'円');
+    const g=document.getElementById(`wg-${c}`);
+    if(g){ g.textContent=`${m.chgp>=0?'+':''}${m.chgp.toFixed(2)}%`; g.style.color=m.chgp>=0?'var(--up)':'var(--down)'; }
+    let tags = tag(m.shortUp?'up':m.shortDn?'down':'flat', m.shortUp?'上':m.shortDn?'下':'—');
+    if(m.cross?.type==='gc') tags+=tag('gc','GC');
+    if(m.cross?.type==='dc') tags+=tag('dc','DC');
+    if(m.vRatio>=1.5) tags+=tag('warn','出来高');
+    setHtml(`wt-${c}`, tags);
+  }
+}
+function loadFromWatch(c){
+  document.getElementById('code').value=c;
+  tab('d'); run();
+  window.scrollTo(0,0);
+}
+const setTxt=(id,t)=>{const e=document.getElementById(id); if(e)e.textContent=t;};
+const setHtml=(id,h)=>{const e=document.getElementById(id); if(e)e.innerHTML=h;};
+</script>
+</body>
+</html>
