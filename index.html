@@ -264,6 +264,14 @@
     <button class="btn" style="margin-top:10px" onclick="screenAll()">▶ スキャン開始</button>
     <div class="hint" id="scanProg" style="margin-top:8px"></div>
     <div class="hint">※ 約1〜2分・通信量やや多め。Wi-Fi推奨。株価は約15〜20分遅延。</div>
+    <div class="seg" id="lens" style="margin-top:12px; flex-wrap:wrap; font-size:13px">
+      <button data-v="total" class="on" onclick="setLens('total')">総合</button>
+      <button data-v="mom" onclick="setLens('mom')">🔥勢い</button>
+      <button data-v="pull" onclick="setLens('pull')">🌱押し目</button>
+      <button data-v="break" onclick="setLens('break')">⚡ブレイク</button>
+      <button data-v="reb" onclick="setLens('reb')">💎反発</button>
+    </div>
+    <div class="hint" id="lensDesc" style="margin-top:6px"></div>
   </div>
   <div id="slist"></div>
 </div>
@@ -944,10 +952,20 @@ function screenScore(rows, code){
   if(m.cross?.type==='gc') tags.push('GC');
   if(mom>0) sc+=1; if(mom>10) sc+=1;      // モメンタム加点
   if(m.rsi>75) tags.push('過熱');
-  return {code, px, mom, rsi:m.rsi, score:sc, tags, buy, sell};
+  // レンズ用の材料
+  const dev = m.sma25 ? (px-m.sma25)/m.sma25*100 : 0;
+  const mid=sma(closes,20), sd=stddev(closes,20);
+  const bbPos = (mid&&sd) ? (px-(mid-2*sd))/((4*sd)||1)*100 : 50;
+  const win=closes.slice(-250), lo52=Math.min(...win), hi52=Math.max(...win);
+  const pos=(px-lo52)/((hi52-lo52)||1)*100;
+  const uptrend = !!(m.sma75 && px>m.sma75) && sc>0;
+  return {code, px, mom, rsi:m.rsi, score:sc, tags, buy, sell, dev, bbPos:Math.round(bbPos), pos:Math.round(pos), gc:m.cross?.type==='gc', uptrend};
 }
 async function screenAll(){
-  if(scanning) return; scanning=true; scanResults=[];
+  if(scanning) return; scanning=true;
+  // 前回スキャンの総合順位を記録（順位変動の矢印用）
+  window.prevRank={}; LENS.total.f(scanResults).forEach((r,i)=>{ window.prevRank[r.code]=i; });
+  scanResults=[];
   const prog=document.getElementById('scanProg'); const box=document.getElementById('slist'); box.innerHTML='';
   let done=0; const B=5;
   for(let i=0;i<N225.length;i+=B){
@@ -966,19 +984,40 @@ async function screenAll(){
   prog.textContent=`完了：${scanResults.length}銘柄を評価（上位20を表示）`;
   try{ localStorage.setItem('toushi_scan', JSON.stringify({t:Date.now(), r:scanResults.slice(0,40)})); }catch(e){}
 }
+const LENS={
+  total:{d:'総合スコア順（多角的に強い銘柄）', f:a=>a.slice().sort((x,y)=>y.score-x.score||y.mom-x.mom)},
+  mom:  {d:'🔥 3ヶ月の上昇率が大きい順（勢い・急騰株）', f:a=>a.slice().sort((x,y)=>y.mom-x.mom)},
+  pull: {d:'🌱 上昇トレンドで今は下寄り＝仕込み場候補（バンド下限に近い順）', f:a=>a.filter(r=>r.uptrend && (r.pos??0)>35).sort((x,y)=>(x.bbPos??50)-(y.bbPos??50))},
+  break:{d:'⚡ 52週高値圏でブレイク狙い（高値に近い順）', f:a=>a.filter(r=>(r.mom??0)>-2).sort((x,y)=>(y.pos??0)-(x.pos??0))},
+  reb:  {d:'💎 売られすぎからの反発狙い（RSIが低い順・逆張り）', f:a=>a.slice().sort((x,y)=>(x.rsi??50)-(y.rsi??50))},
+};
+let curLens='total';
+function setLens(v){ curLens=v; document.querySelectorAll('#lens button').forEach(b=>b.classList.toggle('on',b.dataset.v===v)); renderScan(); }
 function renderScan(){
-  const box=document.getElementById('slist'); const top=scanResults.slice(0,20);
-  if(!top.length){ box.innerHTML='<div class="card empty">結果がありません。「スキャン開始」を押してください。</div>'; return; }
+  const box=document.getElementById('slist');
+  document.getElementById('lensDesc').textContent = LENS[curLens].d;
+  const top=LENS[curLens].f(scanResults).slice(0,20);
+  if(!top.length){ box.innerHTML='<div class="card empty">この切り口では該当がありません。別のレンズか、スキャンし直してください。</div>'; return; }
   const medal=i=> i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1);
-  box.innerHTML=top.map((r,i)=>`
-    <div class="wrow" onclick="document.getElementById('code').value='${r.code}';tab('d');run();window.scrollTo(0,0)">
+  const pr=window.prevRank||{};
+  box.innerHTML=top.map((r,i)=>{
+    let chg='';
+    if(curLens==='total'){
+      const p=pr[r.code];
+      chg = (p==null) ? ' <span style="color:var(--acc);font-size:11px">NEW</span>'
+          : (p>i) ? ` <span style="color:var(--up);font-size:11px">↑${p-i}</span>`
+          : (p<i) ? ` <span style="color:var(--down);font-size:11px">↓${i-p}</span>`
+          : ' <span style="color:var(--mut);font-size:11px">±0</span>';
+    }
+    return `<div class="wrow" onclick="document.getElementById('code').value='${r.code}';tab('d');run();window.scrollTo(0,0)">
       <div style="min-width:24px; font-weight:800; color:var(--mut); text-align:center">${medal(i)}</div>
       <div class="nm">
-        <div class="c">${jpName(r.code)||r.code}</div>
+        <div class="c">${jpName(r.code)||r.code}${chg}</div>
         <div class="s">${r.tags.join('・')||'—'} ／ 🟢${r.buy??0}🔴${r.sell??0} ／ 3ヶ月 ${r.mom>=0?'+':''}${r.mom.toFixed(1)}%</div>
       </div>
       <div class="pr"><div class="p">${fmt(r.px)}円</div><div class="g" style="color:var(--acc)">★${r.score}</div></div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 function loadScanCache(){
   if(scanResults.length){ renderScan(); return; }
