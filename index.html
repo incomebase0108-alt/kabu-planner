@@ -809,10 +809,22 @@ function render(d){
   chgEl.textContent=`${m.chg>=0?'+':''}${m.chg.toFixed(1)}円 (${m.chgp>=0?'+':''}${m.chgp.toFixed(2)}%) 前日比`;
   chgEl.style.color=m.chg>=0?'var(--up)':'var(--down)';
 
+  // エントリー戦略を先に確定し、買い/利確/損切りの箱を推奨エントリーに合わせる
+  const strat = entryStrategy(m); m._strat = strat;
+  m.entry = strat.recEntry;                                   // 押し目が遠い時は成行/ブレイク価格に
+  m.tp = Math.max(m.recHigh, m.entry + (m.entry - m.sl)*m.rr);
+  m.entryPct=(m.entry-m.px)/m.px*100;
+  m.pullback = m.entry < m.px*0.999;
+  m.tpPct=(m.tp-m.entry)/m.entry*100;
+  m.slPct=(m.entry-m.sl)/m.entry*100;
+  m.riskPct=m.slPct;
+
   document.getElementById('buy').textContent=fmt(m.entry);
   document.getElementById('tp').textContent=fmt(m.tp);
   document.getElementById('sl').textContent=fmt(m.sl);
-  document.getElementById('buyd').textContent = m.pullback ? `現在比 ${m.entryPct.toFixed(1)}%（押し目待ち）` : '現在が買い目安圏';
+  document.getElementById('buyd').textContent =
+    m.entryPct<-0.3 ? `現在比 ${m.entryPct.toFixed(1)}%（押し目）` :
+    m.entryPct>0.3  ? `現在比 +${m.entryPct.toFixed(1)}%（ブレイク）` : '現在値付近';
   document.getElementById('tpd').textContent = `+${m.tpPct.toFixed(1)}%`;
   document.getElementById('sld').textContent = `-${m.slPct.toFixed(1)}%`;
   document.getElementById('entryOv').value = Math.round(m.entry);
@@ -867,7 +879,7 @@ function render(d){
   document.getElementById('asof').textContent=`データ源: ${d.src||'—'} ／ 基準: ${dt.toLocaleString('ja-JP')} ／ 直近${d.rows.length}営業日`;
 
   window.lastM=m; window.lastCode=d.code; m._entry0=m.entry;
-  renderStrategy(m);
+  renderStrategy(strat);
   renderLines(m);
   renderSignals(m);
   drawChart(d.rows, m.sl, m.tp, m.entry);
@@ -925,27 +937,27 @@ function trendLines(m){
 function entryStrategy(m){
   const px=m.px, pull=m.entry, dist=(px-pull)/px*100;
   const brk=Math.max(m.recHigh, px*1.002), brkAbove=px>=m.recHigh;
-  let label, note;
+  let label, note, recEntry;
   if(!m.shortUp && !m.longUp){
-    label='様子見';
+    label='様子見'; recEntry=pull;
     note=`トレンドが上向きでない。今は無理に買わず、<b>5日線回復や反発</b>を確認してから。買うなら押し目 ¥${fmt(pull)} を割らない範囲で慎重に。`;
   } else if(!m.pullback || dist<1){
-    label=`現在が買い場圏（¥${fmt(px)}）`;
+    label=`現在が買い場圏（¥${fmt(px)}）`; recEntry=px;
     note=`支持のすぐ上にいて押し目とほぼ同水準。<b>現在値〜で拾える</b>。割れたら損切り ¥${fmt(m.sl)}。`;
   } else if(dist<=3){
-    label=`押し目買い ¥${fmt(pull)}（指値 -${dist.toFixed(1)}%）`;
+    label=`押し目買い ¥${fmt(pull)}（指値 -${dist.toFixed(1)}%）`; recEntry=pull;
     note=`支持が近く<b>押し目を拾いやすい</b>。¥${fmt(pull)} に指値、割れたら損切り ¥${fmt(m.sl)}。`;
   } else {
     label = brkAbove ? `順張り（現在値〜 ¥${fmt(px)}）` : `ブレイク買い ¥${fmt(brk)} 超え`;
+    recEntry = brkAbove ? px : brk;
     note=`上昇中で支持から離れており、<b>押し目 ¥${fmt(pull)}（-${dist.toFixed(1)}%）は来にくい</b>（＝待つと買えない“動く的”）。順張りなら${brkAbove?'<b>現在値で乗る</b>':'<b>直近高値 ¥'+fmt(m.recHigh)+' 超えで乗る</b>'}。それでも深い押しを待つなら ¥${fmt(pull)} 指値（来たら好機・来なければ見送り）。`;
   }
-  return {label, note, brk, pull, dist, px};
+  return {label, note, brk, pull, dist, px, recEntry};
 }
-function renderStrategy(m){
-  const el=document.getElementById('strategy'); if(!el) return;
-  const s=entryStrategy(m);
+function renderStrategy(s){
+  const el=document.getElementById('strategy'); if(!el||!s) return;
   el.innerHTML=`<div style="font-weight:700; margin-bottom:4px">🛒 エントリー戦略 — <span style="color:var(--acc)">${s.label}</span></div>`
-    +`<div style="color:var(--mut); font-size:12px; margin-bottom:6px; font-family:var(--mono)">成行(今) ¥${fmt(m.px)} ／ ブレイク ¥${fmt(s.brk)}超 ／ 押し目 ¥${fmt(s.pull)}(-${s.dist.toFixed(1)}%)</div>`
+    +`<div style="color:var(--mut); font-size:12px; margin-bottom:6px; font-family:var(--mono)">成行(今) ¥${fmt(s.px)} ／ ブレイク ¥${fmt(s.brk)}超 ／ 押し目 ¥${fmt(s.pull)}(-${s.dist.toFixed(1)}%)</div>`
     +`<div>${s.note}</div>`;
 }
 function renderLines(m){
