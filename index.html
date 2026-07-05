@@ -131,6 +131,13 @@
   .sig summary::-webkit-details-marker{display:none}
   .sig summary .rd{color:var(--mut); font-size:12px}
   .sig .h{font-size:12px; color:var(--mut); margin-top:8px; line-height:1.7; padding-top:6px; border-top:1px dashed var(--line)}
+  /* 注目ライン */
+  .ln{display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; padding:9px 11px; background:var(--card2);
+    border:1px solid var(--line); border-radius:8px; margin-bottom:6px}
+  .ln .k{font-size:12px; font-weight:700; white-space:nowrap; min-width:96px}
+  .ln .v{font-family:var(--mono); font-weight:800; font-size:16px}
+  .ln .pct{font-family:var(--mono); font-size:12px; font-weight:700; margin-left:auto; text-align:right}
+  .ln .note{flex-basis:100%; font-size:11px; color:var(--mut); margin-top:1px}
   /* トグルスイッチ */
   .sw{position:relative; display:inline-block; width:50px; height:28px}
   .sw input{opacity:0; width:0; height:0}
@@ -281,7 +288,21 @@
       <div class="cell sl"><div class="k">損切り（−）</div><div class="v" id="sl">—</div><div class="d" id="sld"></div></div>
     </div>
 
+    <div style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+      <label style="margin:0; white-space:nowrap; font-size:12px">指値で試算</label>
+      <input id="entryOv" inputmode="decimal" oninput="recalcPlan()" style="max-width:120px; padding:8px 10px">
+      <button class="btn ghost sm" onclick="resetEntry()">目安に戻す</button>
+      <button class="btn sm" onclick="watchBuyFromDetail()">🎯 この値で買いアラート</button>
+    </div>
+    <div class="hint" id="entryOvNote">買いたい価格を入れると、利確・損切り・株数・損益がその価格基準で再計算されます。</div>
+
     <div class="verdict" id="verdict"></div>
+
+    <div style="margin-top:12px; padding-top:10px; border-top:1px solid var(--line)">
+      <div style="font-weight:700; font-size:13px; margin-bottom:8px">🎯 注目ライン（超えたら上昇 / 割ったら下落）</div>
+      <div id="linesPanel"></div>
+      <div class="hint">「今いくら」より、この価格を超えた/割った瞬間にトレンドが変わる目安。指値や監視の基準に。</div>
+    </div>
 
     <div style="margin-top:10px">
       <div class="kv"><span class="mut">短期トレンド</span><span class="r" id="k-short"></span></div>
@@ -778,6 +799,7 @@ function render(d){
   document.getElementById('buyd').textContent = m.pullback ? `現在比 ${m.entryPct.toFixed(1)}%（押し目待ち）` : '現在が買い目安圏';
   document.getElementById('tpd').textContent = `+${m.tpPct.toFixed(1)}%`;
   document.getElementById('sld').textContent = `-${m.slPct.toFixed(1)}%`;
+  document.getElementById('entryOv').value = Math.round(m.entry);
 
   document.getElementById('short-tag').innerHTML=tag(m.shortUp?'up':m.shortDn?'down':'flat','短期 '+(m.shortUp?'上昇':m.shortDn?'下降':'もみ合い'));
   document.getElementById('long-tag').innerHTML =tag(m.longUp?'up':m.longDn?'down':'flat','長期 '+(m.longUp?'上昇':m.longDn?'下降':'中立'));
@@ -823,12 +845,68 @@ function render(d){
   const dt=new Date((d.meta.regularMarketTime||d.rows[d.rows.length-1].t)*1000);
   document.getElementById('asof').textContent=`データ源: ${d.src||'—'} ／ 基準: ${dt.toLocaleString('ja-JP')} ／ 直近${d.rows.length}営業日`;
 
-  window.lastM=m; window.lastCode=d.code;
+  window.lastM=m; window.lastCode=d.code; m._entry0=m.entry;
+  renderLines(m);
   renderSignals(m);
   drawChart(d.rows, m.sl, m.tp, m.entry);
   calcSize();
 }
+// 指値で試算: 買値を上書きして利確/損切り/株数/損益を再計算
+function recalcPlan(){
+  const m=window.lastM; if(!m) return;
+  const e=parseFloat(document.getElementById('entryOv').value); if(!(e>0)) return;
+  const sl=e*(1-m.riskPct/100), tp=e+(e-sl)*m.rr;
+  m.entry=e; m.sl=sl; m.tp=tp;
+  document.getElementById('buy').textContent=fmt(e);
+  document.getElementById('tp').textContent=fmt(tp);
+  document.getElementById('sl').textContent=fmt(sl);
+  const ep=(e-m.px)/m.px*100;
+  document.getElementById('buyd').textContent = Math.abs(ep)<0.1?'現在値ちょうど':`現在比 ${ep>=0?'+':''}${ep.toFixed(1)}%（指値）`;
+  document.getElementById('tpd').textContent=`+${((tp-e)/e*100).toFixed(1)}%`;
+  document.getElementById('sld').textContent=`-${((e-sl)/e*100).toFixed(1)}%`;
+  calcSize();
+  if(lastData) drawChart(lastData.rows, sl, tp, e);
+}
+function resetEntry(){ const m=window.lastM; if(!m) return; document.getElementById('entryOv').value=Math.round(m._entry0??m.entry); recalcPlan(); }
+function watchBuyFromDetail(){
+  if(!window.lastCode) return;
+  const e=parseFloat(document.getElementById('entryOv').value) || (window.lastM&&window.lastM.entry);
+  if(!(e>0)){ alert('指値の価格を入れてください'); return; }
+  addBuyWatch(window.lastCode, Math.round(e));
+  alert(`${jpName(window.lastCode)||window.lastCode} を ¥${fmt(e)} で買いアラート登録しました（⭐監視タブ）。この価格まで下がると通知します。`);
+}
 
+// ゴールデンクロス成立価格: 翌営業日にnS日線がnL日線を上抜けるのに必要な終値(概算)
+function crossPrice(c, nS, nL){
+  if(c.length<nL) return null;
+  const S=k=>c.slice(-k).reduce((a,b)=>a+b,0);
+  const P=(nS*S(nL-1) - nL*S(nS-1))/(nL-nS);
+  return (P>0 && isFinite(P)) ? P : null;
+}
+function trendLines(m){
+  const px=m.px, out=[], push=(k,v,note)=>{ if(v>0) out.push({k,v,note,pct:(v-px)/px*100}); };
+  push('25日線', m.sma25, px>=m.sma25?'上回って推移＝上昇基調。割れたら転換注意':'下回って推移＝下落基調。超えたら転換の合図');
+  push('⬆ 上抜けで加速', m.recHigh, '直近高値。超えたら上昇トレンド本格化（買い増し/ブレイク狙い）');
+  push('⬇ 下抜けで警戒', m.recLow, '直近安値。割れたら下落トレンド入り（損切り・撤退の目安）');
+  const gc=crossPrice(m.closes,5,25);
+  if(gc){
+    const beforeGC = m.sma5!=null && m.sma25!=null && m.sma5<m.sma25; // まだ上抜け前か
+    out.push({k: beforeGC?'✨ GC成立価格':'⚠ DC警戒価格', v:gc,
+      note: beforeGC?'この値まで上がれば5日線が25日線を上抜け＝ゴールデンクロス（買いの節目）'
+                    :'この値まで下がると5日線が25日線を下抜け＝デッドクロス（弱気転換の節目）',
+      pct:(gc-px)/px*100});
+  }
+  push('75日線(中期)', m.sma75, '中期のトレンド分岐。上で強気・下で弱気');
+  return out;
+}
+function renderLines(m){
+  const box=document.getElementById('linesPanel'); if(!box) return;
+  box.innerHTML=trendLines(m).map(l=>{
+    const above=l.v>=m.px, col=above?'var(--up)':'var(--down)';
+    return `<div class="ln"><span class="k">${l.k}</span><span class="v" style="color:${col}">¥${fmt(l.v)}</span>`
+      +`<span class="pct" style="color:${col}">${l.pct>=0?'+':''}${l.pct.toFixed(1)}%</span><span class="note">${l.note}</span></div>`;
+  }).join('');
+}
 function renderSignals(m){
   const sigs=computeSignals(m);
   const cls={buy:'up', sell:'down', neutral:'flat'}, lab={buy:'買い', sell:'売り', neutral:'中立'};
@@ -953,47 +1031,61 @@ function tab(t){
 
 // ================= ウォッチリスト =================
 const WKEY='toushi_watch';
-const getWatch=()=>{ try{return JSON.parse(localStorage.getItem(WKEY))||[]}catch(e){return[]} };
+function getWatch(){ let a; try{a=JSON.parse(localStorage.getItem(WKEY))||[]}catch(e){a=[]} return a.map(x=> typeof x==='string'?{code:x}:x); }
 const setWatch=(a)=>localStorage.setItem(WKEY, JSON.stringify(a));
 function addToWatch(){ if(lastData) addWatchCode(lastData.code); }
 function addWatchCode(code){
   code = (typeof code==='string' && /^\d{4}$/.test(code)) ? code : (document.getElementById('wcode').value||'').trim();
   if(!/^\d{4}$/.test(code)){ alert('4桁の銘柄コードを入れてください'); return; }
   const w=getWatch();
-  if(!w.includes(code)){ w.push(code); setWatch(w); }
+  if(!w.find(x=>x.code===code)){ w.push({code}); setWatch(w); }
   document.getElementById('wcode').value='';
   tab('w');
 }
-function delWatch(code){ setWatch(getWatch().filter(c=>c!==code)); renderWatchList(); }
+// 買い目標(指値)を監視に登録
+function addBuyWatch(code, buy){
+  const w=getWatch(); let it=w.find(x=>x.code===code);
+  if(!it){ it={code}; w.push(it); }
+  it.buy=buy; setWatch(w);
+  tab('w');
+}
+function delWatch(code){ setWatch(getWatch().filter(x=>x.code!==code)); renderWatchList(); }
+function clearBuy(code){ const w=getWatch(); const it=w.find(x=>x.code===code); if(it){ delete it.buy; setWatch(w);} renderWatchList(); }
 
 function renderWatchList(){
   const w=getWatch(), box=document.getElementById('wlist');
-  if(!w.length){ box.innerHTML='<div class="card empty">まだありません。上でコードを追加するか、詳細画面の「⭐追加」から登録してください。</div>'; return; }
-  box.innerHTML = w.map(c=>`
+  if(!w.length){ box.innerHTML='<div class="card empty">まだありません。上でコードを追加するか、詳細画面の「⭐追加」「🎯買いアラート」から登録してください。</div>'; return; }
+  box.innerHTML = w.map(x=>{ const c=x.code; return `
     <div class="wrow" id="w-${c}">
       <div class="nm" onclick="loadFromWatch('${c}')">
-        <div class="c">${c}</div><div class="s" id="wn-${c}">${jpName(c)||'タップで詳細'}</div>
+        <div class="c">${jpName(c)||c}</div>
+        <div class="s" id="wn-${c}">${x.buy?`🎯買い目標 ¥${fmt(x.buy)}`:'タップで詳細'}</div>
       </div>
       <div class="tags" id="wt-${c}"><span class="tag flat">…</span></div>
       <div class="pr"><div class="p" id="wp-${c}">—</div><div class="g" id="wg-${c}"></div></div>
       <button class="del" onclick="delWatch('${c}')">✕</button>
-    </div>`).join('');
+    </div>`; }).join('');
   refreshWatch();
 }
 async function refreshWatch(){
   const w=getWatch();
-  for(const c of w){
+  for(const x of w){
+    const c=x.code;
     const D=await fetchData(c);
     if(!D){ setTxt(`wp-${c}`,'取得失敗'); setTxt(`wt-${c}`,''); continue; }
-    const name=jpName(c)||D.meta.shortName||D.meta.symbol;
     const m=computeMetrics(D.rows, D.meta, curStyle);
-    setTxt(`wn-${c}`, name);
+    setTxt(`wn-${c}`, x.buy?`🎯買い目標 ¥${fmt(x.buy)}`:(jpName(c)||'—'));
     setTxt(`wp-${c}`, fmt(m.px)+'円');
     const g=document.getElementById(`wg-${c}`);
     if(g){ g.textContent=`${m.chgp>=0?'+':''}${m.chgp.toFixed(2)}%`; g.style.color=m.chgp>=0?'var(--up)':'var(--down)'; }
-    let tags = tag(m.shortUp?'up':m.shortDn?'down':'flat', m.shortUp?'上':m.shortDn?'下':'—');
+    let tags='';
+    if(x.buy){
+      if(m.px<=x.buy){ tags+=tag('up','🎯買い場到達');
+        if(alertsEnabled()){ beep(760,0.12,0.06); if('Notification'in window&&Notification.permission==='granted'){ try{ new Notification('買い場到達: '+(jpName(c)||c), {body:`¥${fmt(m.px)}（目標¥${fmt(x.buy)}）`}); }catch(e){} } }
+      } else { tags+=tag('flat',`あと${((m.px-x.buy)/x.buy*100).toFixed(1)}%`); }
+    }
+    tags += tag(m.shortUp?'up':m.shortDn?'down':'flat', m.shortUp?'上':m.shortDn?'下':'—');
     if(m.cross?.type==='gc') tags+=tag('gc','GC');
-    if(m.cross?.type==='dc') tags+=tag('dc','DC');
     if(m.vRatio>=1.5) tags+=tag('warn','出来高');
     setHtml(`wt-${c}`, tags);
   }
