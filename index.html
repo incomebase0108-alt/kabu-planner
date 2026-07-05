@@ -58,7 +58,7 @@
   .kv:last-child{border:0}
   .kv .mut{color:var(--mut); white-space:nowrap}
   .kv .r{text-align:right}
-  canvas{width:100%; height:120px; display:block; margin-top:8px}
+  canvas{width:100%; height:160px; display:block; margin-top:8px; border-radius:8px}
   .hint{font-size:12px; color:var(--mut); margin-top:8px}
   .err{color:var(--warn); font-size:13px; margin-top:8px; display:none}
   .disc{font-size:11px; color:var(--mut); line-height:1.6; margin-top:8px}
@@ -165,7 +165,7 @@
       </div>
     </div>
 
-    <canvas id="chart" width="560" height="120"></canvas>
+    <canvas id="chart" width="560" height="200"></canvas>
 
     <div class="plan">
       <div class="cell buy"><div class="k">買い目安</div><div class="v" id="buy">—</div><div class="d" id="buyd"></div></div>
@@ -183,6 +183,15 @@
       <div class="kv"><span class="mut">勢い RSI(14)</span><span class="r" id="k-rsi"></span></div>
       <div class="kv"><span class="mut">値動き ATR(14)</span><span class="r" id="k-atr"></span></div>
       <div class="kv"><span class="mut">リスク／リワード</span><span class="r" id="k-rr"></span></div>
+    </div>
+
+    <div style="margin-top:12px; padding-top:10px; border-top:1px solid var(--line)">
+      <div style="font-weight:700; font-size:13px; margin-bottom:6px">💰 資金管理（許容損失から株数を逆算）</div>
+      <div class="adv" style="grid-template-columns:1fr 1fr">
+        <div><label>1回の許容損失(円)</label><input id="riskYen" inputmode="numeric" value="20000" oninput="calcSize()"></div>
+        <div><label>投資可能額(円・任意)</label><input id="fund" inputmode="numeric" placeholder="任意" oninput="calcSize()"></div>
+      </div>
+      <div id="sizeOut" class="hint" style="margin-top:8px; line-height:1.7"></div>
     </div>
 
     <button class="btn ghost" id="addWatch" style="margin-top:12px" onclick="addToWatch()">⭐ この銘柄をウォッチリストに追加</button>
@@ -617,10 +626,29 @@ function render(d){
   const dt=new Date((d.meta.regularMarketTime||d.rows[d.rows.length-1].t)*1000);
   document.getElementById('asof').textContent=`データ源: ${d.src||'—'} ／ 基準: ${dt.toLocaleString('ja-JP')} ／ 直近${d.rows.length}営業日`;
 
-  drawChart(m.closes, m.sl, m.tp, m.entry);
+  window.lastM=m; window.lastCode=d.code;
+  drawChart(d.rows, m.sl, m.tp, m.entry);
+  calcSize();
 }
 
 function showErr(msg){ const e=document.getElementById('err'); e.textContent=msg; e.style.display=msg?'block':'none'; }
+
+// 資金管理: 許容損失(円)→株数を逆算(単元100株)
+function calcSize(){
+  const m=window.lastM, out=document.getElementById('sizeOut'); if(!m||!out) return;
+  const riskYen=parseFloat(document.getElementById('riskYen').value)||0;
+  const fund=parseFloat(document.getElementById('fund').value)||0;
+  const perShare=m.entry-m.sl;
+  if(!(perShare>0)||!(riskYen>0)){ out.textContent=''; return; }
+  let shares=Math.floor(riskYen/perShare/100)*100;
+  if(shares<100){ out.innerHTML=`⚠ 100株でも損失リスク約<b>${Math.round(perShare*100).toLocaleString()}円</b>で許容額を超えます。許容損失を上げるか損切り幅の狭い銘柄を。`; return; }
+  let capped=false;
+  if(fund>0){ const maxF=Math.floor(fund/m.entry/100)*100; if(maxF<shares){ shares=maxF; capped=true; } }
+  if(shares<100){ out.textContent='投資可能額が1単元(100株)に届きません。'; return; }
+  const need=Math.round(m.entry*shares), lossYen=Math.round(perShare*shares), gainYen=Math.round((m.tp-m.entry)*shares);
+  out.innerHTML=`推奨 <b style="color:var(--acc); font-size:15px">${shares.toLocaleString()}株</b>（必要資金 約${need.toLocaleString()}円）<br>`
+    +`損切り時 <span style="color:var(--down)">−${lossYen.toLocaleString()}円</span> ／ 利確時 <span style="color:var(--up)">＋${gainYen.toLocaleString()}円</span>${capped?'　※資金上限で調整':''}`;
+}
 
 // ================= 手動 =================
 function runManual(){
@@ -651,37 +679,55 @@ function runManual(){
   document.getElementById('k-atr').textContent='—';
   document.getElementById('k-rr').textContent=`損-${riskPct.toFixed(1)}% / 利+${(riskPct*rr).toFixed(1)}%`;
   document.getElementById('asof').textContent='手動入力ベース';
-  drawChart([lo||px,px,hi||px].filter(Boolean), sl, tp, px);
+  clearChart();
 }
 
-// ================= チャート =================
-function drawChart(closes, sl, tp, px){
+// ================= チャート(ローソク足+出来高) =================
+function clearChart(){ const cv=document.getElementById('chart'); cv.getContext('2d').clearRect(0,0,cv.width,cv.height); }
+function drawChart(rows, sl, tp, entry){
   const cv=document.getElementById('chart'), ctx=cv.getContext('2d');
-  const W=cv.width, H=cv.height, pad=6; ctx.clearRect(0,0,W,H);
-  if(closes.length<2) return;
-  const view=closes.slice(-120);
-  let mn=Math.min(...view, sl), mx=Math.max(...view, tp);
-  const span=(mx-mn)||1;
-  const X=i=>pad+(W-2*pad)*i/(view.length-1);
-  const Y=v=>pad+(H-2*pad)*(1-(v-mn)/span);
-  ctx.fillStyle='rgba(22,199,132,.08)'; ctx.fillRect(0,0,W,Y(tp));
-  ctx.fillStyle='rgba(240,97,109,.08)'; ctx.fillRect(0,Y(sl),W,H-Y(sl));
-  [[tp,'#16c784'],[sl,'#f0616d'],[px,'#8b98a9']].forEach(([v,c])=>{
-    ctx.strokeStyle=c; ctx.setLineDash([4,3]); ctx.lineWidth=1;
-    ctx.beginPath(); ctx.moveTo(0,Y(v)); ctx.lineTo(W,Y(v)); ctx.stroke();
+  const W=cv.width, H=cv.height, pad=8, VH=34, PH=H-VH-4; ctx.clearRect(0,0,W,H);
+  if(!rows || rows.length<2) return;
+  const view=rows.slice(-90);
+  const RT=44; // 右の価格ラベル余白
+  let mn=Infinity, mx=-Infinity;
+  view.forEach(r=>{ if(r.l<mn)mn=r.l; if(r.h>mx)mx=r.h; });
+  mn=Math.min(mn,sl); mx=Math.max(mx,tp); const span=(mx-mn)||1;
+  const X=i=> pad + (W-2*pad-RT)*i/(view.length-1);
+  const Y=v=> pad + (PH-2*pad)*(1-(v-mn)/span);
+  const cw=Math.max(1.5,(W-2*pad-RT)/view.length*0.62);
+  // 利確/損切り帯
+  ctx.fillStyle='rgba(22,199,132,.06)'; ctx.fillRect(0,0,W,Y(tp));
+  ctx.fillStyle='rgba(240,97,109,.06)'; ctx.fillRect(0,Y(sl),W,PH-Y(sl));
+  // 利確/買い/損切りライン+ラベル
+  [[tp,'#16c784','利確'],[entry,'#3b82f6','買い'],[sl,'#f0616d','損切']].forEach(([v,c,lb])=>{
+    const y=Y(v); ctx.strokeStyle=c; ctx.setLineDash([4,3]); ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W-RT,y); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle=c; ctx.font='9px sans-serif'; ctx.textAlign='left'; ctx.fillText(lb, 2, y-2);
+    ctx.fillRect(W-RT,y-7,RT,14); ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.fillText(fmt(v), W-RT/2, y+3);
   });
-  ctx.setLineDash([]);
-  [[25,'#f5a623'],[75,'#3b82f6']].forEach(([n,col])=>{
-    if(view.length<n) return;
-    const ser=smaSeries(view,n);
-    ctx.strokeStyle=col; ctx.lineWidth=1.2; ctx.beginPath(); let st=false;
-    ser.forEach((v,i)=>{ if(v==null)return; const x=X(i),y=Y(v); st?ctx.lineTo(x,y):(ctx.moveTo(x,y),st=true); });
-    ctx.stroke();
+  // 移動平均(表示範囲で算出)
+  const closes=view.map(r=>r.c);
+  [[25,'#f5a623'],[75,'#60a5fa']].forEach(([n,col])=>{
+    if(view.length<n) return; const ser=smaSeries(closes,n);
+    ctx.strokeStyle=col; ctx.lineWidth=1.1; ctx.beginPath(); let st=false;
+    ser.forEach((v,i)=>{ if(v==null)return; const x=X(i),y=Y(v); st?ctx.lineTo(x,y):(ctx.moveTo(x,y),st=true); }); ctx.stroke();
   });
-  ctx.strokeStyle='#e6edf3'; ctx.lineWidth=1.6; ctx.beginPath();
-  view.forEach((v,i)=>{ const x=X(i),y=Y(v); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
-  ctx.stroke();
-  ctx.fillStyle='#3b82f6'; ctx.beginPath(); ctx.arc(X(view.length-1),Y(view.at(-1)),3,0,7); ctx.fill();
+  // ローソク足+出来高
+  const vmax=Math.max(...view.map(r=>r.v||0))||1;
+  view.forEach((r,i)=>{
+    const x=X(i), up=r.c>=r.o, col=up?'#16c784':'#f0616d';
+    ctx.strokeStyle=col; ctx.fillStyle=col; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(x,Y(r.h)); ctx.lineTo(x,Y(r.l)); ctx.stroke();
+    const yo=Y(r.o), yc=Y(r.c), top=Math.min(yo,yc), bh=Math.max(1,Math.abs(yc-yo));
+    ctx.fillRect(x-cw/2, top, cw, bh);
+    const vh=(r.v||0)/vmax*VH; ctx.globalAlpha=.45; ctx.fillRect(x-cw/2, H-vh, cw, vh); ctx.globalAlpha=1;
+  });
+  // 現在値タグ
+  const last=view[view.length-1].c, ty=Y(last);
+  ctx.fillStyle='#e6edf3'; ctx.fillRect(W-RT,ty-7,RT,14);
+  ctx.fillStyle='#0e1116'; ctx.font='bold 10px sans-serif'; ctx.textAlign='center'; ctx.fillText(fmt(last), W-RT/2, ty+3);
+  ctx.textAlign='left';
 }
 
 // ================= タブ =================
@@ -832,9 +878,10 @@ async function screenAll(){
 function renderScan(){
   const box=document.getElementById('slist'); const top=scanResults.slice(0,20);
   if(!top.length){ box.innerHTML='<div class="card empty">結果がありません。「スキャン開始」を押してください。</div>'; return; }
+  const medal=i=> i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1);
   box.innerHTML=top.map((r,i)=>`
     <div class="wrow" onclick="document.getElementById('code').value='${r.code}';tab('d');run();window.scrollTo(0,0)">
-      <div style="min-width:24px; font-weight:800; color:var(--mut)">${i+1}</div>
+      <div style="min-width:24px; font-weight:800; color:var(--mut); text-align:center">${medal(i)}</div>
       <div class="nm">
         <div class="c">${jpName(r.code)||r.code}</div>
         <div class="s">${r.tags.join('・')||'—'} ／ 3ヶ月 ${r.mom>=0?'+':''}${r.mom.toFixed(1)}%</div>
