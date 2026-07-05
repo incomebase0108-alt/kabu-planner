@@ -6,17 +6,39 @@
 <title>日本株 売買プランナー</title>
 <style>
   :root{
-    --bg:#0e1116; --card:#171b22; --card2:#1e2530; --line:#2a323f;
-    --tx:#e6edf3; --mut:#8b98a9; --acc:#3b82f6;
-    --up:#16c784; --down:#f0616d; --warn:#f5a623;
+    --bg:#070b12; --card:#0f1622; --card2:#0c131e; --line:#1c2a3c;
+    --tx:#e6f0f7; --mut:#7d90a8; --acc:#22d3ee;
+    --up:#2ee6a6; --down:#ff5d6c; --warn:#f5b73d;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,"DejaVu Sans Mono",monospace;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
-  body{margin:0; background:var(--bg); color:var(--tx);
+  body{margin:0; color:var(--tx);
     font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
-    line-height:1.5; padding:14px; max-width:600px; margin:0 auto; font-size:15px}
-  h1{font-size:19px; margin:2px 0 2px}
+    line-height:1.5; padding:14px; max-width:600px; margin:0 auto; font-size:15px;
+    background:
+      radial-gradient(900px 380px at 50% -120px, rgba(34,211,238,.10), transparent 70%),
+      linear-gradient(180deg, #070b12, #05080d);
+    background-attachment:fixed;
+    min-height:100vh;
+  }
+  /* デジタル格子の薄い背景 */
+  body::before{content:""; position:fixed; inset:0; z-index:-1; pointer-events:none; opacity:.35;
+    background-image:linear-gradient(rgba(34,211,238,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(34,211,238,.05) 1px,transparent 1px);
+    background-size:34px 34px; mask-image:radial-gradient(circle at 50% 20%,#000,transparent 80%)}
+  .num{font-family:var(--mono); font-variant-numeric:tabular-nums; letter-spacing:.5px}
+  .topbar{display:flex; justify-content:space-between; align-items:flex-start; gap:10px}
+  h1{font-size:18px; margin:2px 0 2px; letter-spacing:.5px}
   .sub{color:var(--mut); font-size:12px; margin-bottom:12px}
-  .card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:12px}
+  .clock{font-family:var(--mono); font-size:11px; color:var(--acc); background:rgba(34,211,238,.06);
+    border:1px solid var(--line); border-radius:8px; padding:6px 9px; white-space:nowrap; text-align:right;
+    box-shadow:inset 0 0 14px rgba(34,211,238,.10); line-height:1.4}
+  .clock .dot{display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--up);
+    box-shadow:0 0 8px var(--up); margin-right:4px; vertical-align:middle; animation:blink 1.5s infinite}
+  .clock .tz{color:var(--mut); font-size:9px}
+  @keyframes blink{0%,100%{opacity:1} 50%{opacity:.3}}
+  .card{background:linear-gradient(180deg,rgba(255,255,255,.02),transparent), var(--card);
+    border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:12px;
+    box-shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 6px 20px rgba(0,0,0,.25)}
   label{display:block; font-size:12px; color:var(--mut); margin-bottom:5px}
   .row{display:flex; gap:8px}
   input,select{width:100%; background:var(--card2); border:1px solid var(--line); color:var(--tx);
@@ -28,22 +50,24 @@
   .tabs{display:flex; gap:8px; margin-bottom:12px}
   .tabs button{flex:1; background:var(--card2); border:1px solid var(--line); color:var(--mut);
     padding:11px; border-radius:10px; font-size:15px; font-weight:700}
-  .tabs button.on{background:var(--acc); color:#fff; border-color:var(--acc)}
-  .btn{width:100%; background:var(--acc); border:0; color:#fff; font-weight:700; font-size:16px;
-    padding:13px; border-radius:12px; margin-top:4px}
+  .tabs button.on{background:linear-gradient(180deg,rgba(34,211,238,.25),rgba(34,211,238,.10)); color:var(--acc);
+    border-color:var(--acc); box-shadow:0 0 12px rgba(34,211,238,.3), inset 0 0 10px rgba(34,211,238,.12)}
+  .btn{width:100%; background:linear-gradient(180deg,#2ce0f5,#0bb6d6); border:0; color:#03222a; font-weight:800; font-size:16px;
+    padding:13px; border-radius:12px; margin-top:4px; box-shadow:0 0 16px rgba(34,211,238,.35); letter-spacing:.3px}
   .btn:active{opacity:.85}
   .btn.ghost{background:var(--card2); border:1px solid var(--line); color:var(--tx)}
   .btn.sm{padding:9px; font-size:13px; margin:0; width:auto}
-  .price{font-size:34px; font-weight:800; letter-spacing:.5px}
-  .price small{font-size:14px; color:var(--mut); font-weight:600}
-  .chg{font-size:14px; font-weight:700}
+  .price{font-size:36px; font-weight:800; letter-spacing:1px; font-family:var(--mono); font-variant-numeric:tabular-nums;
+    text-shadow:0 0 18px rgba(34,211,238,.35)}
+  .price small{font-size:14px; color:var(--mut); font-weight:600; font-family:inherit; text-shadow:none}
+  .chg{font-size:14px; font-weight:700; font-family:var(--mono)}
   .plan{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:6px}
   .plan .cell{background:var(--card2); border:1px solid var(--line); border-radius:10px; padding:10px; text-align:center}
   .plan .cell .k{font-size:11px; color:var(--mut)}
-  .plan .cell .v{font-size:18px; font-weight:800; margin-top:3px}
-  .plan .cell.buy .v{color:var(--acc)}
-  .plan .cell.tp .v{color:var(--up)}
-  .plan .cell.sl .v{color:var(--down)}
+  .plan .cell .v{font-size:19px; font-weight:800; margin-top:3px; font-family:var(--mono); font-variant-numeric:tabular-nums}
+  .plan .cell.buy{border-color:rgba(34,211,238,.4)} .plan .cell.buy .v{color:var(--acc); text-shadow:0 0 12px rgba(34,211,238,.4)}
+  .plan .cell.tp{border-color:rgba(46,230,166,.35)} .plan .cell.tp .v{color:var(--up); text-shadow:0 0 12px rgba(46,230,166,.35)}
+  .plan .cell.sl{border-color:rgba(255,93,108,.35)} .plan .cell.sl .v{color:var(--down); text-shadow:0 0 12px rgba(255,93,108,.35)}
   .plan .cell .d{font-size:11px; color:var(--mut); margin-top:3px}
   .tag{display:inline-block; font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px; margin:2px 4px 2px 0}
   .tag.up{background:rgba(22,199,132,.15); color:var(--up)}
@@ -73,8 +97,8 @@
   .wrow .nm .c{font-weight:700; font-size:15px}
   .wrow .nm .s{font-size:11px; color:var(--mut); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
   .wrow .pr{text-align:right; min-width:96px}
-  .wrow .pr .p{font-weight:800; font-size:15px}
-  .wrow .pr .g{font-size:12px; font-weight:700}
+  .wrow .pr .p{font-weight:800; font-size:15px; font-family:var(--mono); font-variant-numeric:tabular-nums}
+  .wrow .pr .g{font-size:12px; font-weight:700; font-family:var(--mono)}
   .wrow .del{color:var(--mut); background:none; border:0; font-size:18px; padding:2px 4px}
   .wrow .tags{min-width:70px; text-align:right}
   .empty{color:var(--mut); font-size:13px; text-align:center; padding:16px}
@@ -112,8 +136,13 @@
 </head>
 <body>
 
-<h1>📈 日本株 売買プランナー</h1>
-<div class="sub">現在値・トレンド・出来高・利確／損切りを表示。<b>売買指示ではなく判断の補助</b>です。</div>
+<div class="topbar">
+  <div>
+    <h1>📈 日本株 売買プランナー</h1>
+    <div class="sub">現在値・トレンド・出来高・利確／損切り。<b>判断の補助</b>です。</div>
+  </div>
+  <div class="clock"><span class="dot"></span><span id="mkt">—</span><br><span class="num" id="clock">--:--:--</span> <span class="tz">JST</span></div>
+</div>
 
 <div class="tabs">
   <button id="tab-d" class="on" onclick="tab('d')">詳細</button>
@@ -921,6 +950,28 @@ async function diag(){
 }
 // 起動時：保存済みプロキシURLを入力欄へ
 (function(){ const p=localStorage.getItem('toushi_proxy'); const el=document.getElementById('proxyUrl'); if(p&&el) el.value=p; })();
+
+// ================= JSTクロック＋場中ランプ =================
+function marketStatus(){
+  const now=new Date();
+  const j=new Date(now.toLocaleString('en-US',{timeZone:'Asia/Tokyo'}));
+  const day=j.getDay(), hm=j.getHours()*60+j.getMinutes();
+  if(day===0||day===6) return {t:'休場', c:'var(--mut)'};
+  if(hm>=540&&hm<=690) return {t:'前場', c:'var(--up)'};       // 9:00-11:30
+  if(hm>690&&hm<750)   return {t:'昼休', c:'var(--warn)'};     // 11:30-12:30
+  if(hm>=750&&hm<=900) return {t:'後場', c:'var(--up)'};       // 12:30-15:00
+  if(hm<540)           return {t:'寄前', c:'var(--mut)'};
+  return {t:'引後', c:'var(--mut)'};
+}
+function tickClock(){
+  const c=document.getElementById('clock'); if(!c) return;
+  const now=new Date();
+  c.textContent=now.toLocaleTimeString('ja-JP',{hour12:false, timeZone:'Asia/Tokyo'});
+  const ms=marketStatus(), mk=document.getElementById('mkt');
+  if(mk){ mk.textContent=ms.t; mk.style.color=ms.c; }
+  const dot=document.querySelector('.clock .dot'); if(dot) dot.style.background=ms.c, dot.style.boxShadow='0 0 8px '+ms.c;
+}
+tickClock(); setInterval(tickClock, 1000);
 
 // ================= 中長期スクリーニング（発掘） =================
 const N225=["1332","1333","1605","1721","1801","1802","1803","1808","1812","1925","1928","1963","2002","2269","2282","2413","2432","2501","2502","2503","2531","2768","2801","2802","2871","2914","3086","3099","3101","3103","3105","3289","3382","3401","3402","3405","3407","3436","3861","3863","4004","4005","4021","4042","4043","4061","4063","4151","4183","4188","4208","4272","4324","4452","4502","4503","4506","4507","4519","4523","4543","4568","4578","4631","4689","4704","4751","4755","4901","4902","4911","5019","5020","5101","5108","5201","5202","5214","5232","5233","5301","5332","5333","5401","5406","5411","5541","5631","5703","5706","5707","5711","5713","5714","5801","5802","5803","5901","6098","6103","6113","6178","6301","6302","6305","6326","6361","6367","6471","6472","6473","6479","6501","6503","6504","6506","6645","6674","6701","6702","6703","6724","6752","6758","6762","6770","6841","6857","6902","6952","6954","6971","6976","6988","7003","7004","7011","7012","7013","7186","7201","7202","7203","7211","7261","7267","7269","7270","7272","7731","7733","7735","7751","7752","7762","7832","7911","7912","7951","8001","8002","8015","8031","8035","8053","8058","8233","8252","8253","8267","8303","8304","8306","8308","8309","8316","8331","8354","8411","8601","8604","8628","8630","8725","8729","8750","8766","8795","8801","8802","8804","8830","9001","9005","9007","9008","9009","9020","9021","9022","9064","9101","9104","9107","9202","9301","9412","9432","9433","9501","9502","9503","9531","9532","9602","9735","9766","9983","9984"];
