@@ -132,6 +132,34 @@
   .alertbar{background:rgba(240,97,109,.15); border:1px solid var(--down); color:var(--down);
     border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:13px; font-weight:700; display:none}
   .alertbar.on{display:block}
+  /* ===== 派手な演出 ===== */
+  body::after{content:""; position:fixed; left:0; right:0; top:-140px; height:140px; z-index:9998; pointer-events:none;
+    background:linear-gradient(180deg,transparent,rgba(34,211,238,.07),rgba(46,230,166,.05),transparent);
+    animation:scan 7s linear infinite}
+  @keyframes scan{0%{top:-140px}100%{top:100%}}
+  @keyframes pulse{0%,100%{box-shadow:0 0 14px rgba(34,211,238,.35)}50%{box-shadow:0 0 30px rgba(34,211,238,.7),0 0 8px rgba(46,230,166,.4)}}
+  .btn{animation:pulse 2.6s ease-in-out infinite}
+  @keyframes flicker{0%,18%,22%,50%,54%,100%{opacity:1; text-shadow:0 0 10px rgba(34,211,238,.5)}20%,52%{opacity:.65; text-shadow:none}}
+  h1{animation:flicker 6s infinite}
+  /* 流れるネオンボーダー(結果カード) */
+  #result{position:relative; overflow:hidden}
+  #result::before{content:""; position:absolute; inset:0; border-radius:14px; padding:1.5px; z-index:0; pointer-events:none;
+    background:linear-gradient(120deg,var(--acc),transparent 30%,var(--up) 50%,transparent 70%,var(--acc));
+    background-size:300% 300%; animation:flow 5s linear infinite;
+    -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude}
+  #result>*{position:relative; z-index:1}
+  @keyframes flow{0%{background-position:0% 50%}100%{background-position:300% 50%}}
+  /* スキャン進捗バー */
+  .scanbar{height:9px; background:var(--card2); border:1px solid var(--line); border-radius:6px; overflow:hidden; margin-top:10px; display:none; position:relative}
+  .scanbar.on{display:block}
+  .scanbar .fill{height:100%; width:0; background:linear-gradient(90deg,var(--acc),var(--up)); box-shadow:0 0 14px var(--acc); transition:width .25s}
+  .scanbar .fill::after{content:""; position:absolute; inset:0;
+    background:repeating-linear-gradient(45deg,rgba(255,255,255,.15) 0 8px,transparent 8px 16px); animation:stripe 1s linear infinite}
+  @keyframes stripe{0%{background-position:0 0}100%{background-position:32px 0}}
+  /* 価格更新フラッシュ */
+  @keyframes flashup{0%{background:rgba(46,230,166,.28)}100%{background:transparent}}
+  .flashup{animation:flashup .6s ease-out}
+  .g.score{text-shadow:0 0 10px rgba(34,211,238,.5)}
 </style>
 </head>
 <body>
@@ -291,7 +319,8 @@
     <div style="font-weight:700; margin-bottom:4px">🔎 中長期の強い銘柄を発掘（日経225ベース）</div>
     <div class="hint">225銘柄をスキャンし、<b>上昇配列（25>75>200）・200日線上・ゴールデンクロス・押し目・勢い</b>でランキング。テクニカルのみ（業績は含みません）。<b>儲かる保証ではなく候補の抽出</b>です。</div>
     <button class="btn" style="margin-top:10px" onclick="screenAll()">▶ スキャン開始</button>
-    <div class="hint" id="scanProg" style="margin-top:8px"></div>
+    <div class="scanbar" id="scanbar"><div class="fill" id="scanFill"></div></div>
+    <div class="hint num" id="scanProg" style="margin-top:8px"></div>
     <div class="hint">※ 約1〜2分・通信量やや多め。Wi-Fi推奨。株価は約15〜20分遅延。</div>
     <div class="seg" id="lens" style="margin-top:12px; flex-wrap:wrap; font-size:13px">
       <button data-v="total" class="on" onclick="setLens('total')">総合</button>
@@ -455,6 +484,14 @@ function detectCross(c, nf, ns, look=7){
 }
 const fmt=x=> x==null?'—' : (Math.abs(x)>=1000? Math.round(x).toLocaleString() : x.toFixed(1));
 const tag=(k,t)=>`<span class="tag ${k}">${t}</span>`;
+// 数字カウントアップ演出
+function countUp(el, to, dur=550){
+  if(!el) return;
+  if(to==null || !isFinite(to)){ el.textContent=fmt(to); return; }
+  const from=parseFloat((el.textContent||'').replace(/[^0-9.\-]/g,''))||0;
+  const t0=performance.now();
+  (function step(t){ const k=Math.min(1,(t-t0)/dur); const v=from+(to-from)*(1-Math.pow(1-k,3)); el.textContent=fmt(v); if(k<1) requestAnimationFrame(step); })(performance.now());
+}
 
 // 追加指標
 function emaSeries(a,n){ const out=[]; const k=2/(n+1); let e=null;
@@ -675,7 +712,8 @@ function render(d){
   const m=computeMetrics(d.rows, d.meta, curStyle);
   document.getElementById('result').classList.remove('hide');
   document.getElementById('name').textContent=`${d.name}（${d.code}）`;
-  document.getElementById('px').textContent=fmt(m.px);
+  countUp(document.getElementById('px'), m.px);
+  const rc=document.getElementById('result'); rc.classList.remove('flashup'); void rc.offsetWidth; rc.classList.add('flashup');
   const chgEl=document.getElementById('chg');
   chgEl.textContent=`${m.chg>=0?'+':''}${m.chg.toFixed(1)}円 (${m.chgp>=0?'+':''}${m.chgp.toFixed(2)}%) 前日比`;
   chgEl.style.color=m.chg>=0?'var(--up)':'var(--down)';
@@ -1018,6 +1056,8 @@ async function screenAll(){
   window.prevRank={}; LENS.total.f(scanResults).forEach((r,i)=>{ window.prevRank[r.code]=i; });
   scanResults=[];
   const prog=document.getElementById('scanProg'); const box=document.getElementById('slist'); box.innerHTML='';
+  const bar=document.getElementById('scanbar'), fill=document.getElementById('scanFill');
+  bar.classList.add('on'); fill.style.width='0%';
   let done=0; const B=5;
   for(let i=0;i<N225.length;i+=B){
     const batch=N225.slice(i,i+B);
@@ -1027,8 +1067,10 @@ async function screenAll(){
     }));
     rs.forEach(r=>{ if(r) scanResults.push(r); });
     done=Math.min(done+batch.length, N225.length);
-    prog.textContent=`スキャン中… ${done}/${N225.length}`;
+    prog.textContent=`スキャン中… ${done}/${N225.length}（${scanResults.length}件取得）`;
+    fill.style.width=(done/N225.length*100).toFixed(0)+'%';
   }
+  fill.style.width='100%'; setTimeout(()=>bar.classList.remove('on'), 1200);
   scanning=false;
   scanResults.sort((a,b)=> b.score-a.score || b.mom-a.mom);
   renderScan();
@@ -1066,7 +1108,7 @@ function renderScan(){
         <div class="c">${jpName(r.code)||r.code}${chg}</div>
         <div class="s">${r.tags.join('・')||'—'} ／ 🟢${r.buy??0}🔴${r.sell??0} ／ 3ヶ月 ${r.mom>=0?'+':''}${r.mom.toFixed(1)}%</div>
       </div>
-      <div class="pr"><div class="p">${fmt(r.px)}円</div><div class="g" style="color:var(--acc)">★${r.score}</div></div>
+      <div class="pr"><div class="p">${fmt(r.px)}円</div><div class="g score" style="color:var(--acc)">★${r.score}</div></div>
     </div>`;
   }).join('');
 }
