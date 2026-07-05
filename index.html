@@ -44,6 +44,7 @@
   .plan .cell.buy .v{color:var(--acc)}
   .plan .cell.tp .v{color:var(--up)}
   .plan .cell.sl .v{color:var(--down)}
+  .plan .cell .d{font-size:11px; color:var(--mut); margin-top:3px}
   .tag{display:inline-block; font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px; margin:2px 4px 2px 0}
   .tag.up{background:rgba(22,199,132,.15); color:var(--up)}
   .tag.down{background:rgba(240,97,109,.15); color:var(--down)}
@@ -166,9 +167,9 @@
     <canvas id="chart" width="560" height="120"></canvas>
 
     <div class="plan">
-      <div class="cell buy"><div class="k">買い目安</div><div class="v" id="buy">—</div></div>
-      <div class="cell tp"><div class="k">利確（+）</div><div class="v" id="tp">—</div></div>
-      <div class="cell sl"><div class="k">損切り（−）</div><div class="v" id="sl">—</div></div>
+      <div class="cell buy"><div class="k">買い目安</div><div class="v" id="buy">—</div><div class="d" id="buyd"></div></div>
+      <div class="cell tp"><div class="k">利確（+）</div><div class="v" id="tp">—</div><div class="d" id="tpd"></div></div>
+      <div class="cell sl"><div class="k">損切り（−）</div><div class="v" id="sl">—</div><div class="d" id="sld"></div></div>
     </div>
 
     <div class="verdict" id="verdict"></div>
@@ -386,9 +387,9 @@ const tag=(k,t)=>`<span class="tag ${k}">${t}</span>`;
 
 // ================= スタイル =================
 const STYLE={
-  short:{atrK:1.2, rr:1.5, nf:5,  ns:25,  cf:5,  cs:25, label:'短期'},
-  swing:{atrK:1.8, rr:2.0, nf:25, ns:75,  cf:25, cs:75, label:'中期'},
-  long: {atrK:2.5, rr:2.5, nf:75, ns:200, cf:25, cs:75, label:'長期'},
+  short:{atrK:1.5, rr:1.8, nf:5,  ns:25,  cf:5,  cs:25, clamp:[2,6],  label:'短期'},
+  swing:{atrK:2.0, rr:2.2, nf:25, ns:75,  cf:25, cs:75, clamp:[3,10], label:'中期'},
+  long: {atrK:2.8, rr:2.8, nf:75, ns:200, cf:25, cs:75, clamp:[5,16], label:'長期'},
 };
 let curStyle='short';
 document.querySelectorAll('#style button').forEach(b=>b.onclick=()=>{
@@ -490,17 +491,38 @@ function computeMetrics(rows, meta, styleKey){
   const longUp  = sma75!=null&&sma200!=null ? (sma75>sma200 && px>sma75) : (sma75!=null&&px>sma75);
   const longDn  = sma75!=null&&sma200!=null ? (sma75<sma200 && px<sma75) : (sma75!=null&&px<sma75);
 
-  // 損切り幅
-  let riskPct=parseFloat(document.getElementById('riskPct').value);
+  // ===== 売買プラン(構造ベース) =====
+  const atrv = a || px*0.02;
+  const N=Math.min(20, closes.length);
+  const recLow=Math.min(...lows.slice(-N));   // 直近安値(支持)
+  const recHigh=Math.max(...highs.slice(-N)); // 直近高値(抵抗)
   let rr=parseFloat(document.getElementById('rr').value)||S.rr;
-  let stopDist;
-  if(riskPct>0){ stopDist=px*riskPct/100; }
-  else if(a){ stopDist=a*S.atrK; riskPct=stopDist/px*100; }
-  else { stopDist=px*0.03; riskPct=3; }
-  const sl=px-stopDist, tp=px+stopDist*rr, buy=px;
+
+  // 買い目安(エントリー): 上昇中は押し目=支持まで引く。支持圏/非上昇なら現在値。
+  const support=Math.max(sma25||0, recLow, px-atrv*S.atrK);
+  let entry = (shortUp && support < px*0.998) ? support : px;
+  const pullback = entry < px*0.999;          // 押し目待ちか
+  const entryPct = (entry-px)/px*100;         // 現在比(マイナス=下)
+
+  // 損切り: 手動%優先。なければエントリー下の支持割れをclampで健全化。
+  let riskPct=parseFloat(document.getElementById('riskPct').value);
+  let sl;
+  if(riskPct>0){ sl=entry*(1-riskPct/100); }
+  else {
+    sl=Math.min(recLow*0.995, entry-atrv*S.atrK);
+    let rp=(entry-sl)/entry*100;
+    rp=Math.max(S.clamp[0], Math.min(S.clamp[1], rp)); // 浅すぎ/深すぎを補正
+    riskPct=rp; sl=entry*(1-rp/100);
+  }
+  const stopDist=entry-sl;
+  // 利確: リワード比と直近高値の高い方(構造的に届く水準)
+  let tp=Math.max(entry+stopDist*rr, recHigh);
+  const tpPct=(tp-entry)/entry*100, slPct=(entry-sl)/entry*100;
+  const buy=entry;
 
   return {px,prev,chg,chgp,sma5,sma25,sma75,sma200,rsi:r,atr:a,vRatio,vLast,cross,
-          shortUp,shortDn,longUp,longDn,riskPct,rr,sl,tp,buy,closes};
+          shortUp,shortDn,longUp,longDn,riskPct,rr,sl,tp,buy,entry,pullback,entryPct,
+          tpPct,slPct,recLow,recHigh,closes};
 }
 
 // ================= 詳細描画 =================
@@ -531,9 +553,12 @@ function render(d){
   chgEl.textContent=`${m.chg>=0?'+':''}${m.chg.toFixed(1)}円 (${m.chgp>=0?'+':''}${m.chgp.toFixed(2)}%) 前日比`;
   chgEl.style.color=m.chg>=0?'var(--up)':'var(--down)';
 
-  document.getElementById('buy').textContent=fmt(m.buy);
+  document.getElementById('buy').textContent=fmt(m.entry);
   document.getElementById('tp').textContent=fmt(m.tp);
   document.getElementById('sl').textContent=fmt(m.sl);
+  document.getElementById('buyd').textContent = m.pullback ? `現在比 ${m.entryPct.toFixed(1)}%（押し目待ち）` : '現在が買い目安圏';
+  document.getElementById('tpd').textContent = `+${m.tpPct.toFixed(1)}%`;
+  document.getElementById('sld').textContent = `-${m.slPct.toFixed(1)}%`;
 
   document.getElementById('short-tag').innerHTML=tag(m.shortUp?'up':m.shortDn?'down':'flat','短期 '+(m.shortUp?'上昇':m.shortDn?'下降':'もみ合い'));
   document.getElementById('long-tag').innerHTML =tag(m.longUp?'up':m.longDn?'down':'flat','長期 '+(m.longUp?'上昇':m.longDn?'下降':'中立'));
@@ -571,12 +596,15 @@ function render(d){
   if(m.vRatio>=1.5) v+=' 出来高急増で<b>注目度が高い</b>。';
   if(m.rsi>=75) v+=' ただしRSI高く<b>過熱感</b>あり飛びつき注意。';
   if(m.rsi<=25) v+=' RSI低く<b>反発狙い</b>の位置でもある。';
-  document.getElementById('verdict').innerHTML=`${tag(cls,'総合')}${v}`;
+  const entryTxt = m.pullback
+    ? `現在 <b>${fmt(m.px)}円</b>。<b>${fmt(m.entry)}円</b>まで押したら買い候補（指値向き）。`
+    : `現在 <b>${fmt(m.px)}円</b>で買い目安圏。`;
+  document.getElementById('verdict').innerHTML=`${tag(cls,'総合')}${entryTxt} ${v}`;
 
   const dt=new Date((d.meta.regularMarketTime||d.rows[d.rows.length-1].t)*1000);
   document.getElementById('asof').textContent=`データ源: ${d.src||'—'} ／ 基準: ${dt.toLocaleString('ja-JP')} ／ 直近${d.rows.length}営業日`;
 
-  drawChart(m.closes, m.sl, m.tp, m.px);
+  drawChart(m.closes, m.sl, m.tp, m.entry);
 }
 
 function showErr(msg){ const e=document.getElementById('err'); e.textContent=msg; e.style.display=msg?'block':'none'; }
@@ -783,21 +811,51 @@ function effTargets(h){
   const tp = h.tp>0 ? h.tp : h.entry*(1+def*S.rr/100);
   return {tp, sl};
 }
+let editingHold=null;
+function editHold(c){ editingHold=c; renderHolds(); }
+function saveHoldEdit(c){
+  const h=getHolds(), x=h.find(v=>v.code===c); if(!x) return;
+  const e=parseFloat(document.getElementById('e-entry-'+c).value);
+  const tp=parseFloat(document.getElementById('e-tp-'+c).value);
+  const sl=parseFloat(document.getElementById('e-sl-'+c).value);
+  if(e>0) x.entry=e;
+  x.tp = tp>0?tp:null;
+  x.sl = sl>0?sl:null;
+  setHolds(h); editingHold=null; renderHolds();
+}
 function renderHolds(){
   document.getElementById('alertSw').checked=alertsEnabled();
   const h=getHolds(), box=document.getElementById('hlist');
   if(!h.length){ box.innerHTML='<div class="card empty">保有銘柄がありません。上で登録してください。</div>'; document.getElementById('alertBar').classList.remove('on'); return; }
-  box.innerHTML=h.map(x=>`
-    <div class="wrow hrow" id="h-${x.code}">
+  box.innerHTML=h.map(x=>{
+    const {tp,sl}=effTargets(x);
+    if(editingHold===x.code){
+      return `<div class="card" id="h-${x.code}">
+        <div style="font-weight:700; margin-bottom:8px">✎ ${jpName(x.code)||x.code}（${x.code}）の目標を変更</div>
+        <div class="adv" style="grid-template-columns:1fr 1fr 1fr">
+          <div><label>買値</label><input id="e-entry-${x.code}" inputmode="decimal" value="${x.entry}"></div>
+          <div><label>目標売却(利確)</label><input id="e-tp-${x.code}" inputmode="decimal" value="${Math.round(tp)}"></div>
+          <div><label>損切り</label><input id="e-sl-${x.code}" inputmode="decimal" value="${Math.round(sl)}"></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn sm" style="flex:1" onclick="saveHoldEdit('${x.code}')">保存</button>
+          <button class="btn ghost sm" style="flex:1" onclick="editingHold=null;renderHolds()">取消</button>
+        </div>
+        <div class="hint">空欄で保存すると自動設定に戻ります。急落・急騰時はここで手動調整を。</div>
+      </div>`;
+    }
+    return `<div class="wrow hrow" id="h-${x.code}">
       <div class="nm" onclick="loadFromWatch('${x.code}')">
         <div class="c">${jpName(x.code)||x.code}</div>
-        <div class="s">買値 ${fmt(x.entry)}${x.qty?` ×${x.qty}株`:''}</div>
+        <div class="s">買${fmt(x.entry)}${x.qty?`×${x.qty}`:''}　🎯${fmt(tp)} / 🛑${fmt(sl)}</div>
       </div>
       <div class="st" id="hst-${x.code}"><span class="tag flat">…</span></div>
       <div class="pr"><div class="p" id="hpx-${x.code}">—</div><div class="pl" id="hpl-${x.code}"></div></div>
-      <label class="sw" style="transform:scale(.7)"><input type="checkbox" ${x.on?'checked':''} onchange="toggleHold('${x.code}')"><span class="sl"></span></label>
-      <button class="del" onclick="delHold('${x.code}')">✕</button>
-    </div>`).join('');
+      <button class="del" onclick="editHold('${x.code}')" title="目標を変更">✎</button>
+      <label class="sw" style="transform:scale(.66)"><input type="checkbox" ${x.on?'checked':''} onchange="toggleHold('${x.code}')"><span class="sl"></span></label>
+      <button class="del" onclick="delHold('${x.code}')" title="売却/削除">✕</button>
+    </div>`;
+  }).join('');
   refreshHolds();
 }
 async function refreshHolds(){
