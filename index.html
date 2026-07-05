@@ -6,9 +6,9 @@
 <title>日本株 売買プランナー</title>
 <style>
   :root{
-    --bg:#070b12; --card:#0f1622; --card2:#0c131e; --line:#1c2a3c;
-    --tx:#e6f0f7; --mut:#7d90a8; --acc:#22d3ee;
-    --up:#2ee6a6; --down:#ff5d6c; --warn:#f5b73d;
+    --bg:#000700; --card:#04140a; --card2:#02170c; --line:#0f4020;
+    --tx:#c9ffd8; --mut:#4f9268; --acc:#00ff66;
+    --up:#00ff66; --down:#ff4d4d; --warn:#eaff00;
     --mono:ui-monospace,"SF Mono",Menlo,Consolas,"DejaVu Sans Mono",monospace;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
@@ -16,22 +16,22 @@
     font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
     line-height:1.5; padding:14px; max-width:600px; margin:0 auto; font-size:15px;
     background:
-      radial-gradient(900px 380px at 50% -120px, rgba(34,211,238,.10), transparent 70%),
-      linear-gradient(180deg, #070b12, #05080d);
+      radial-gradient(900px 380px at 50% -120px, rgba(0,255,102,.12), transparent 70%),
+      linear-gradient(180deg, #000700, #000200);
     background-attachment:fixed;
-    min-height:100vh;
+    min-height:100vh; padding-bottom:34px;
   }
   /* デジタル格子の薄い背景 */
   body::before{content:""; position:fixed; inset:0; z-index:-1; pointer-events:none; opacity:.35;
-    background-image:linear-gradient(rgba(34,211,238,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(34,211,238,.05) 1px,transparent 1px);
+    background-image:linear-gradient(rgba(0,255,102,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(0,255,102,.05) 1px,transparent 1px);
     background-size:34px 34px; mask-image:radial-gradient(circle at 50% 20%,#000,transparent 80%)}
   .num{font-family:var(--mono); font-variant-numeric:tabular-nums; letter-spacing:.5px}
   .topbar{display:flex; justify-content:space-between; align-items:flex-start; gap:10px}
   h1{font-size:18px; margin:2px 0 2px; letter-spacing:.5px}
   .sub{color:var(--mut); font-size:12px; margin-bottom:12px}
-  .clock{font-family:var(--mono); font-size:11px; color:var(--acc); background:rgba(34,211,238,.06);
+  .clock{font-family:var(--mono); font-size:11px; color:var(--acc); background:rgba(0,255,102,.06);
     border:1px solid var(--line); border-radius:8px; padding:6px 9px; white-space:nowrap; text-align:right;
-    box-shadow:inset 0 0 14px rgba(34,211,238,.10); line-height:1.4}
+    box-shadow:inset 0 0 14px rgba(0,255,102,.10); line-height:1.4}
   .clock .dot{display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--up);
     box-shadow:0 0 8px var(--up); margin-right:4px; vertical-align:middle; animation:blink 1.5s infinite}
   .clock .tz{color:var(--mut); font-size:9px}
@@ -46,27 +46,27 @@
   input:focus,select:focus{border-color:var(--acc)}
   .seg{display:flex; background:var(--card2); border:1px solid var(--line); border-radius:10px; overflow:hidden}
   .seg button{flex:1; background:transparent; border:0; color:var(--mut); padding:10px; font-size:14px; font-weight:600}
-  .seg button.on{background:var(--acc); color:#fff}
+  .seg button.on{background:var(--acc); color:#002810}
   .tabs{display:flex; gap:8px; margin-bottom:12px}
   .tabs button{flex:1; background:var(--card2); border:1px solid var(--line); color:var(--mut);
     padding:11px; border-radius:10px; font-size:15px; font-weight:700}
-  .tabs button.on{background:linear-gradient(180deg,rgba(34,211,238,.25),rgba(34,211,238,.10)); color:var(--acc);
-    border-color:var(--acc); box-shadow:0 0 12px rgba(34,211,238,.3), inset 0 0 10px rgba(34,211,238,.12)}
-  .btn{width:100%; background:linear-gradient(180deg,#2ce0f5,#0bb6d6); border:0; color:#03222a; font-weight:800; font-size:16px;
-    padding:13px; border-radius:12px; margin-top:4px; box-shadow:0 0 16px rgba(34,211,238,.35); letter-spacing:.3px}
+  .tabs button.on{background:linear-gradient(180deg,rgba(0,255,102,.25),rgba(0,255,102,.10)); color:var(--acc);
+    border-color:var(--acc); box-shadow:0 0 12px rgba(0,255,102,.3), inset 0 0 10px rgba(0,255,102,.12)}
+  .btn{width:100%; background:linear-gradient(180deg,#00ff77,#00b84f); border:0; color:#002810; font-weight:800; font-size:16px;
+    padding:13px; border-radius:12px; margin-top:4px; box-shadow:0 0 16px rgba(0,255,102,.45); letter-spacing:.3px}
   .btn:active{opacity:.85}
   .btn.ghost{background:var(--card2); border:1px solid var(--line); color:var(--tx)}
   .btn.sm{padding:9px; font-size:13px; margin:0; width:auto}
   .price{font-size:36px; font-weight:800; letter-spacing:1px; font-family:var(--mono); font-variant-numeric:tabular-nums;
-    text-shadow:0 0 18px rgba(34,211,238,.35)}
+    text-shadow:0 0 18px rgba(0,255,102,.35)}
   .price small{font-size:14px; color:var(--mut); font-weight:600; font-family:inherit; text-shadow:none}
   .chg{font-size:14px; font-weight:700; font-family:var(--mono)}
   .plan{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:6px}
   .plan .cell{background:var(--card2); border:1px solid var(--line); border-radius:10px; padding:10px; text-align:center}
   .plan .cell .k{font-size:11px; color:var(--mut)}
   .plan .cell .v{font-size:19px; font-weight:800; margin-top:3px; font-family:var(--mono); font-variant-numeric:tabular-nums}
-  .plan .cell.buy{border-color:rgba(34,211,238,.4)} .plan .cell.buy .v{color:var(--acc); text-shadow:0 0 12px rgba(34,211,238,.4)}
-  .plan .cell.tp{border-color:rgba(46,230,166,.35)} .plan .cell.tp .v{color:var(--up); text-shadow:0 0 12px rgba(46,230,166,.35)}
+  .plan .cell.buy{border-color:rgba(0,255,102,.4)} .plan .cell.buy .v{color:var(--acc); text-shadow:0 0 12px rgba(0,255,102,.4)}
+  .plan .cell.tp{border-color:rgba(0,255,102,.35)} .plan .cell.tp .v{color:var(--up); text-shadow:0 0 12px rgba(0,255,102,.35)}
   .plan .cell.sl{border-color:rgba(255,93,108,.35)} .plan .cell.sl .v{color:var(--down); text-shadow:0 0 12px rgba(255,93,108,.35)}
   .plan .cell .d{font-size:11px; color:var(--mut); margin-top:3px}
   .tag{display:inline-block; font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px; margin:2px 4px 2px 0}
@@ -134,12 +134,12 @@
   .alertbar.on{display:block}
   /* ===== 派手な演出 ===== */
   body::after{content:""; position:fixed; left:0; right:0; top:-140px; height:140px; z-index:9998; pointer-events:none;
-    background:linear-gradient(180deg,transparent,rgba(34,211,238,.07),rgba(46,230,166,.05),transparent);
+    background:linear-gradient(180deg,transparent,rgba(0,255,102,.07),rgba(0,255,102,.05),transparent);
     animation:scan 7s linear infinite}
   @keyframes scan{0%{top:-140px}100%{top:100%}}
-  @keyframes pulse{0%,100%{box-shadow:0 0 14px rgba(34,211,238,.35)}50%{box-shadow:0 0 30px rgba(34,211,238,.7),0 0 8px rgba(46,230,166,.4)}}
+  @keyframes pulse{0%,100%{box-shadow:0 0 14px rgba(0,255,102,.35)}50%{box-shadow:0 0 30px rgba(0,255,102,.7),0 0 8px rgba(0,255,102,.4)}}
   .btn{animation:pulse 2.6s ease-in-out infinite}
-  @keyframes flicker{0%,18%,22%,50%,54%,100%{opacity:1; text-shadow:0 0 10px rgba(34,211,238,.5)}20%,52%{opacity:.65; text-shadow:none}}
+  @keyframes flicker{0%,18%,22%,50%,54%,100%{opacity:1; text-shadow:0 0 10px rgba(0,255,102,.5)}20%,52%{opacity:.65; text-shadow:none}}
   h1{animation:flicker 6s infinite}
   /* 流れるネオンボーダー(結果カード) */
   #result{position:relative; overflow:hidden}
@@ -157,19 +157,51 @@
     background:repeating-linear-gradient(45deg,rgba(255,255,255,.15) 0 8px,transparent 8px 16px); animation:stripe 1s linear infinite}
   @keyframes stripe{0%{background-position:0 0}100%{background-position:32px 0}}
   /* 価格更新フラッシュ */
-  @keyframes flashup{0%{background:rgba(46,230,166,.28)}100%{background:transparent}}
+  @keyframes flashup{0%{background:rgba(0,255,102,.28)}100%{background:transparent}}
   .flashup{animation:flashup .6s ease-out}
-  .g.score{text-shadow:0 0 10px rgba(34,211,238,.5)}
+  .g.score{text-shadow:0 0 10px rgba(0,255,102,.5)}
+  /* ===== マトリックス背景 ===== */
+  #matrix{position:fixed; inset:0; z-index:-3; opacity:.5; pointer-events:none}
+  .brand{color:var(--acc); font-weight:900; letter-spacing:1px; text-shadow:0 0 8px rgba(0,255,102,.6)}
+  .clock button{background:none; border:0; color:var(--acc); font-size:13px; padding:0 2px; cursor:pointer}
+  /* ===== 起動演出 ===== */
+  #boot{position:fixed; inset:0; z-index:10000; background:#000400; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:6px; transition:opacity .6s; font-family:var(--mono)}
+  #boot.done{opacity:0; pointer-events:none}
+  .bootlogo{font-size:34px; font-weight:900; color:var(--acc); letter-spacing:4px; text-shadow:0 0 20px rgba(0,255,102,.8);
+    animation:flicker 1.2s infinite}
+  .bootsub{font-size:12px; color:var(--mut); letter-spacing:6px}
+  #bootlog{color:var(--acc); font-size:11px; margin-top:16px; min-height:80px; text-align:left; white-space:pre-wrap; width:260px}
+  /* ===== ティッカー ===== */
+  #ticker{position:fixed; left:0; right:0; bottom:0; height:26px; z-index:9997; background:rgba(0,20,8,.92);
+    border-top:1px solid var(--line); overflow:hidden; white-space:nowrap; box-shadow:0 -2px 14px rgba(0,255,102,.15)}
+  #tickerInner{display:inline-block; padding-top:5px; font-family:var(--mono); font-size:12px; color:var(--acc);
+    white-space:nowrap; will-change:transform; animation:ticker 40s linear infinite; letter-spacing:.5px}
+  #ticker .up{color:var(--up)} #ticker .dn{color:var(--down)} #ticker .bd{color:#eaff00; font-weight:800}
+  @keyframes ticker{0%{transform:translateX(100vw)}100%{transform:translateX(-100%)}}
 </style>
 </head>
 <body>
 
+<canvas id="matrix"></canvas>
+
+<!-- 起動演出 -->
+<div id="boot">
+  <div class="bootlogo">INCOMEBASE</div>
+  <div class="bootsub">SECURITIES TERMINAL</div>
+  <pre id="bootlog"></pre>
+</div>
+
 <div class="topbar">
   <div>
     <h1>📈 日本株 売買プランナー</h1>
-    <div class="sub">現在値・トレンド・出来高・利確／損切り。<b>判断の補助</b>です。</div>
+    <div class="sub"><span class="brand">INCOMEBASE</span> 提供 ／ <b>判断の補助</b>ツール</div>
   </div>
-  <div class="clock"><span class="dot"></span><span id="mkt">—</span><br><span class="num" id="clock">--:--:--</span> <span class="tz">JST</span></div>
+  <div class="clock">
+    <span class="dot"></span><span id="mkt">—</span>
+    <button id="sndBtn" onclick="toggleSound()" title="サウンド">🔈</button><br>
+    <span class="num" id="clock">--:--:--</span> <span class="tz">JST</span>
+  </div>
 </div>
 
 <div class="tabs">
@@ -366,11 +398,16 @@
   <div id="hlist"></div>
 </div>
 
+<div class="disc" style="text-align:center; color:var(--acc); font-weight:700; letter-spacing:1px; margin-top:14px">
+  ▮ POWERED BY <span class="brand">INCOMEBASE</span> ▮
+</div>
 <div class="disc">
   ⚠️ 過去の株価から機械計算した「目安」を表示するだけで、値上がり・利益を保証しません。
   株価は約15〜20分遅延（リアルタイムではありません）。アラートはページを開いている間のみ動作します。
   投資は自己責任です。データは Yahoo Finance 等の公開情報で、遅延・欠損の可能性があります。
 </div>
+
+<div id="ticker"><div id="tickerInner">INCOMEBASE SECURITIES ●</div></div>
 
 <script src="stocks.js"></script>
 <script>
@@ -704,7 +741,7 @@ async function run(){
     document.getElementById('manual-wrap').open=true; return;
   }
   lastData={code, name:jpName(code)||D.meta.shortName||D.meta.symbol, rows:D.rows, meta:D.meta, src:D.src};
-  render(lastData);
+  render(lastData); beep(760,0.05,0.05);
 }
 
 function render(d){
@@ -1011,6 +1048,62 @@ function tickClock(){
 }
 tickClock(); setInterval(tickClock, 1000);
 
+// ================= マトリックス・レイン =================
+(function matrixRain(){
+  const cv=document.getElementById('matrix'); if(!cv) return; const ctx=cv.getContext('2d');
+  let W,H,cols,drops; const G=14;
+  const chars='アカサタナハマヤラワイキシチニヒミリウクスツヌフムユルエケセテネヘメレオコソトノホモヨロ0123456789¥$±';
+  function resize(){ W=cv.width=window.innerWidth; H=cv.height=window.innerHeight; cols=Math.floor(W/G); drops=Array(cols).fill(0).map(()=>Math.random()*H/G); }
+  resize(); window.addEventListener('resize',resize);
+  let last=0;
+  (function draw(t){
+    if(t-last>55){ last=t;
+      ctx.fillStyle='rgba(0,4,0,.12)'; ctx.fillRect(0,0,W,H); ctx.font=G+'px monospace';
+      for(let i=0;i<cols;i++){
+        const ch=chars[Math.floor(Math.random()*chars.length)], x=i*G, y=drops[i]*G;
+        ctx.fillStyle=Math.random()<0.03?'#d6ffe0':'#00ff66'; ctx.fillText(ch,x,y);
+        if(y>H && Math.random()>0.975) drops[i]=0; else drops[i]++;
+      }
+    }
+    requestAnimationFrame(draw);
+  })(0);
+})();
+
+// ================= サウンド(電子音) =================
+let soundOn=localStorage.getItem('toushi_snd')==='1', actx=null;
+function ensureAudio(){ try{ if(!actx) actx=new (window.AudioContext||window.webkitAudioContext)(); if(actx.state==='suspended') actx.resume(); }catch(e){} }
+function beep(freq=440,dur=0.05,vol=0.05){ if(!soundOn||!actx) return; try{ const o=actx.createOscillator(),g=actx.createGain(); o.type='square'; o.frequency.value=freq; g.gain.value=vol; o.connect(g); g.connect(actx.destination); o.start(); o.stop(actx.currentTime+dur);}catch(e){} }
+function toggleSound(){ soundOn=!soundOn; localStorage.setItem('toushi_snd',soundOn?'1':'0'); const b=document.getElementById('sndBtn'); if(b)b.textContent=soundOn?'🔊':'🔈'; if(soundOn){ ensureAudio(); beep(880,0.06,0.05);} }
+(function(){ const b=document.getElementById('sndBtn'); if(b)b.textContent=soundOn?'🔊':'🔈'; })();
+document.addEventListener('pointerdown',ensureAudio,{once:true});
+
+// ================= ティッカー =================
+function buildTicker(){
+  const inner=document.getElementById('tickerInner'); if(!inner) return;
+  const brand='<span class="bd">◆ INCOMEBASE SECURITIES ◆</span>';
+  let items;
+  if(scanResults && scanResults.length){
+    items=scanResults.slice(0,25).map(r=>{ const up=r.mom>=0; return `<span class="${up?'up':'dn'}">${jpName(r.code)||r.code} ★${r.score} ${up?'▲':'▼'}${Math.abs(r.mom).toFixed(1)}%</span>`; });
+  } else {
+    items=['7203 トヨタ自動車','6758 ソニーグループ','6861 キーエンス','8306 三菱UFJ','9984 ソフトバンクG','8035 東京エレクトロン','4063 信越化学']
+      .map(n=>`<span>${n} ●</span>`);
+  }
+  const body=items.join('　｜　');
+  inner.innerHTML=`${brand}　${body}　${brand}　${body}`;
+}
+buildTicker();
+
+// ================= 起動演出 =================
+(function boot(){
+  const box=document.getElementById('boot'), log=document.getElementById('bootlog'); if(!box||!log) return;
+  const lines=['> INIT KABU TERMINAL ...ok','> LOAD 4157 SYMBOLS ...ok','> NIKKEI225 UNIVERSE ...ok','> SIGNAL ENGINE (MACD/RSI/BB) ...ok','> INCOMEBASE UPLINK ...ok','> READY.'];
+  let i=0;
+  (function next(){
+    if(i>=lines.length){ setTimeout(()=>box.classList.add('done'), 550); return; }
+    log.textContent+=lines[i++]+'\n'; beep(680,0.02,0.03); setTimeout(next, 300);
+  })();
+})();
+
 // ================= 中長期スクリーニング（発掘） =================
 const N225=["1332","1333","1605","1721","1801","1802","1803","1808","1812","1925","1928","1963","2002","2269","2282","2413","2432","2501","2502","2503","2531","2768","2801","2802","2871","2914","3086","3099","3101","3103","3105","3289","3382","3401","3402","3405","3407","3436","3861","3863","4004","4005","4021","4042","4043","4061","4063","4151","4183","4188","4208","4272","4324","4452","4502","4503","4506","4507","4519","4523","4543","4568","4578","4631","4689","4704","4751","4755","4901","4902","4911","5019","5020","5101","5108","5201","5202","5214","5232","5233","5301","5332","5333","5401","5406","5411","5541","5631","5703","5706","5707","5711","5713","5714","5801","5802","5803","5901","6098","6103","6113","6178","6301","6302","6305","6326","6361","6367","6471","6472","6473","6479","6501","6503","6504","6506","6645","6674","6701","6702","6703","6724","6752","6758","6762","6770","6841","6857","6902","6952","6954","6971","6976","6988","7003","7004","7011","7012","7013","7186","7201","7202","7203","7211","7261","7267","7269","7270","7272","7731","7733","7735","7751","7752","7762","7832","7911","7912","7951","8001","8002","8015","8031","8035","8053","8058","8233","8252","8253","8267","8303","8304","8306","8308","8309","8316","8331","8354","8411","8601","8604","8628","8630","8725","8729","8750","8766","8795","8801","8802","8804","8830","9001","9005","9007","9008","9009","9020","9021","9022","9064","9101","9104","9107","9202","9301","9412","9432","9433","9501","9502","9503","9531","9532","9602","9735","9766","9983","9984"];
 let scanning=false, scanResults=[];
@@ -1057,7 +1150,7 @@ async function screenAll(){
   scanResults=[];
   const prog=document.getElementById('scanProg'); const box=document.getElementById('slist'); box.innerHTML='';
   const bar=document.getElementById('scanbar'), fill=document.getElementById('scanFill');
-  bar.classList.add('on'); fill.style.width='0%';
+  bar.classList.add('on'); fill.style.width='0%'; beep(520,0.05,0.05);
   let done=0; const B=5;
   for(let i=0;i<N225.length;i+=B){
     const batch=N225.slice(i,i+B);
@@ -1073,7 +1166,7 @@ async function screenAll(){
   fill.style.width='100%'; setTimeout(()=>bar.classList.remove('on'), 1200);
   scanning=false;
   scanResults.sort((a,b)=> b.score-a.score || b.mom-a.mom);
-  renderScan();
+  renderScan(); buildTicker(); beep(880,0.08,0.05); setTimeout(()=>beep(1180,0.1,0.05),100);
   prog.textContent=`完了：${scanResults.length}銘柄を評価（上位20を表示）`;
   try{ localStorage.setItem('toushi_scan', JSON.stringify({t:Date.now(), r:scanResults.slice(0,40)})); }catch(e){}
 }
@@ -1237,7 +1330,7 @@ async function refreshHolds(){
   const bar=document.getElementById('alertBar');
   if(fired.length){
     bar.innerHTML='🔔 売りシグナル: '+fired.map(f=>`${f.name}（${fmt(f.px)}円 ${f.up?'利確到達':'損切り到達'}）`).join(' / ');
-    bar.classList.add('on');
+    bar.classList.add('on'); beep(320,0.18,0.06); setTimeout(()=>beep(260,0.22,0.06),200);
     if('Notification' in window && Notification.permission==='granted'){
       fired.forEach(f=>{ try{ new Notification('売りシグナル: '+f.name, {body:`${fmt(f.px)}円 — ${f.up?'利確目標到達':'損切りライン到達'}`}); }catch(e){} });
     }
