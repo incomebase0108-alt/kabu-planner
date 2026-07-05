@@ -1351,7 +1351,7 @@ function addHold(){
   const tp=parseFloat(document.getElementById('htp').value)||null;
   const sl=parseFloat(document.getElementById('hsl').value)||null;
   const h=getHolds().filter(x=>x.code!==code);
-  h.push({code, entry, qty, tp, sl, on:true});
+  h.push({code, entry, qty, tp, sl, on:true, since:Date.now()});
   setHolds(h);
   ['hcode','hentry','hqty','htp','hsl'].forEach(id=>document.getElementById(id).value='');
   renderHolds();
@@ -1413,7 +1413,7 @@ function renderHolds(){
     return `<div class="wrow hrow" id="h-${x.code}">
       <div class="nm" onclick="loadFromWatch('${x.code}')">
         <div class="c">${jpName(x.code)||x.code}</div>
-        <div class="s" id="hsub-${x.code}">買${fmt(x.entry)}${x.qty?`×${x.qty}`:''}　🎯${fmt(tp)} / 🛑${fmt(sl)}</div>
+        <div class="s" id="hsub-${x.code}" style="white-space:normal; overflow:visible; line-height:1.7">買¥${fmt(x.entry)}${x.qty?` ×${x.qty}`:''}　🎯${fmt(tp)} / 🛑${fmt(sl)}</div>
       </div>
       <div class="st" id="hst-${x.code}"><span class="tag flat">…</span></div>
       <div class="pr"><div class="p" id="hpx-${x.code}">—</div><div class="pl" id="hpl-${x.code}"></div></div>
@@ -1439,8 +1439,14 @@ async function refreshHolds(){
       sl=Math.max(x.trailSL||cand, cand); sl=Math.min(sl, m.px*0.995);
       if(x.trailSL!==sl){ x.trailSL=sl; dirty=true; }
     }
+    // 登録時ラインを初回に記録（"流れ"の起点）
+    if(x.tp0==null||x.sl0==null){ x.tp0=tp; x.sl0=sl; dirty=true; }
     const modeMk = x.mode==='fixed'?'🔒固定':(mode==='manual'?'✋手動':'📈追従');
-    setTxt(`hsub-${x.code}`, `買${fmt(x.entry)}${x.qty?`×${x.qty}`:''}　🎯${fmt(tp)} / 🛑${fmt(sl)} ${modeMk}`);
+    const days = x.since ? Math.floor((Date.now()-x.since)/86400000) : null;
+    const held = days!=null ? `・${days}日保有` : '';
+    const trailUp = (x.sl0!=null && sl>x.sl0+0.5) ? ` <span style="color:var(--up)">🛑▲${fmt(sl-x.sl0)}</span>` : '';
+    const flow = `<span style="color:var(--mut)">登録時</span> 🎯${fmt(x.tp0)}/🛑${fmt(x.sl0)} <span style="color:var(--acc)">→</span> <span style="color:var(--mut)">現在</span> 🎯${fmt(tp)}/🛑${fmt(sl)}${trailUp}`;
+    setHtml(`hsub-${x.code}`, `買¥${fmt(x.entry)}${x.qty?` ×${x.qty}`:''}${held} ${modeMk}<br>${flow}`);
     setTxt(`hpx-${x.code}`, fmt(m.px)+'円');
     const plp=(m.px-x.entry)/x.entry*100;
     const plEl=document.getElementById(`hpl-${x.code}`);
