@@ -328,6 +328,9 @@
         <div><label>1回の許容損失(円)</label><input id="riskYen" inputmode="numeric" value="20000" oninput="calcSize()"></div>
         <div><label>投資可能額(円・任意)</label><input id="fund" inputmode="numeric" placeholder="任意" oninput="calcSize()"></div>
       </div>
+      <label style="display:flex; align-items:center; gap:6px; margin-top:8px; font-size:12px; cursor:pointer">
+        <input type="checkbox" id="unitOne" onchange="calcSize()" style="width:auto"> S株（1株単位）で計算 ※通常は100株単元
+      </label>
       <div id="sizeOut" class="hint" style="margin-top:8px; line-height:1.7"></div>
     </div>
 
@@ -1002,13 +1005,18 @@ function calcSize(){
   const fund=parseFloat(document.getElementById('fund').value)||0;
   const perShare=m.entry-m.sl;
   if(!(perShare>0)||!(riskYen>0)){ out.textContent=''; return; }
-  let shares=Math.floor(riskYen/perShare/100)*100;
-  if(shares<100){ out.innerHTML=`⚠ 100株でも損失リスク約<b>${Math.round(perShare*100).toLocaleString()}円</b>で許容額を超えます。許容損失を上げるか損切り幅の狭い銘柄を。`; return; }
+  const unit=document.getElementById('unitOne')?.checked ? 1 : 100;
+  let shares=Math.floor(riskYen/perShare/unit)*unit;
+  if(shares<unit){
+    out.innerHTML=`⚠ ${unit}株でも損失リスク約<b>${Math.round(perShare*unit).toLocaleString()}円</b>で許容額を超えます。`
+      +(unit===100?'「S株（1株単位）」に切り替えるか、許容損失を上げるか、値がさでない銘柄を。':'許容損失を上げるか、より低位の銘柄を。');
+    return;
+  }
   let capped=false;
-  if(fund>0){ const maxF=Math.floor(fund/m.entry/100)*100; if(maxF<shares){ shares=maxF; capped=true; } }
-  if(shares<100){ out.textContent='投資可能額が1単元(100株)に届きません。'; return; }
+  if(fund>0){ const maxF=Math.floor(fund/m.entry/unit)*unit; if(maxF<shares){ shares=maxF; capped=true; } }
+  if(shares<unit){ out.textContent=`投資可能額が${unit===100?'1単元(100株)':'1株'}に届きません。`; return; }
   const need=Math.round(m.entry*shares), lossYen=Math.round(perShare*shares), gainYen=Math.round((m.tp-m.entry)*shares);
-  out.innerHTML=`推奨 <b style="color:var(--acc); font-size:15px">${shares.toLocaleString()}株</b>（必要資金 約${need.toLocaleString()}円）<br>`
+  out.innerHTML=`推奨 <b style="color:var(--acc); font-size:15px">${shares.toLocaleString()}株</b>${unit===1?'（S株）':''}（必要資金 約${need.toLocaleString()}円）<br>`
     +`損切り時 <span style="color:var(--down)">−${lossYen.toLocaleString()}円</span> ／ 利確時 <span style="color:var(--up)">＋${gainYen.toLocaleString()}円</span>${capped?'　※資金上限で調整':''}`;
 }
 
