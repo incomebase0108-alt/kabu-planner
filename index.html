@@ -93,7 +93,7 @@
   .kv:last-child{border:0}
   .kv .mut{color:var(--mut); white-space:nowrap}
   .kv .r{text-align:right}
-  canvas{width:100%; height:160px; display:block; margin-top:8px; border-radius:8px}
+  canvas{width:100%; height:172px; display:block; margin-top:8px; border-radius:8px}
   .hint{font-size:12px; color:var(--mut); margin-top:8px}
   .err{color:var(--warn); font-size:13px; margin-top:8px; display:none}
   .disc{font-size:11px; color:var(--mut); line-height:1.6; margin-top:8px}
@@ -288,7 +288,7 @@
         <button data-v="M" onclick="setTF('M')" style="flex:none; padding:6px 12px; font-size:12px">月足</button>
       </div>
     </div>
-    <canvas id="chart" width="560" height="200"></canvas>
+    <canvas id="chart" width="560" height="216"></canvas>
 
     <div class="plan">
       <div class="cell buy"><div class="k">買い目安</div><div class="v" id="buy">—</div><div class="d" id="buyd"></div></div>
@@ -1092,7 +1092,7 @@ function setTF(tf){
 function clearChart(){ const cv=document.getElementById('chart'); cv.getContext('2d').clearRect(0,0,cv.width,cv.height); }
 function drawChart(rows, sl, tp, entry){
   const cv=document.getElementById('chart'), ctx=cv.getContext('2d');
-  const W=cv.width, H=cv.height, pad=8, VH=34, PH=H-VH-4; ctx.clearRect(0,0,W,H);
+  const W=cv.width, H=cv.height, pad=8, DH=15, VH=32, PH=H-VH-DH-4; ctx.clearRect(0,0,W,H);
   if(!rows || rows.length<2) return;
   const view=resampleRows(rows, chartTF).slice(-90);
   const RT=44; // 右の価格ラベル余白
@@ -1102,6 +1102,20 @@ function drawChart(rows, sl, tp, entry){
   const X=i=> pad + (W-2*pad-RT)*i/(view.length-1);
   const Y=v=> pad + (PH-2*pad)*(1-(v-mn)/span);
   const cw=Math.max(1.5,(W-2*pad-RT)/view.length*0.62);
+  // 日付軸(下端)+縦グリッド
+  ctx.font='9px monospace';
+  const nLab=Math.min(5, view.length);
+  for(let k=0;k<nLab;k++){
+    const i=Math.round(k*(view.length-1)/(nLab-1||1));
+    const d=new Date(view[i].t*1000), x=X(i);
+    const lb = chartTF==='M' ? `${String(d.getFullYear()).slice(2)}/${d.getMonth()+1}` : `${d.getMonth()+1}/${d.getDate()}`;
+    ctx.strokeStyle='rgba(79,146,104,.18)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(x,4); ctx.lineTo(x,H-DH); ctx.stroke();
+    ctx.fillStyle='#4f9268';
+    ctx.textAlign = k===0?'left':(k===nLab-1?'right':'center');
+    ctx.fillText(lb, k===0?Math.max(x,2):(k===nLab-1?Math.min(x+10,W-RT):x), H-4);
+  }
+  ctx.textAlign='left';
   // 利確/損切り帯
   ctx.fillStyle='rgba(22,199,132,.06)'; ctx.fillRect(0,0,W,Y(tp));
   ctx.fillStyle='rgba(240,97,109,.06)'; ctx.fillRect(0,Y(sl),W,PH-Y(sl));
@@ -1127,7 +1141,7 @@ function drawChart(rows, sl, tp, entry){
     ctx.beginPath(); ctx.moveTo(x,Y(r.h)); ctx.lineTo(x,Y(r.l)); ctx.stroke();
     const yo=Y(r.o), yc=Y(r.c), top=Math.min(yo,yc), bh=Math.max(1,Math.abs(yc-yo));
     ctx.fillRect(x-cw/2, top, cw, bh);
-    const vh=(r.v||0)/vmax*VH; ctx.globalAlpha=.45; ctx.fillRect(x-cw/2, H-vh, cw, vh); ctx.globalAlpha=1;
+    const vh=(r.v||0)/vmax*VH; ctx.globalAlpha=.45; ctx.fillRect(x-cw/2, H-DH-vh, cw, vh); ctx.globalAlpha=1;
   });
   // 現在値タグ
   const last=view[view.length-1].c, ty=Y(last);
