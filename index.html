@@ -90,6 +90,12 @@
   .sug .it .cd{color:var(--acc); font-weight:700; min-width:46px}
   .sug .it .nm{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
   .sug .none{padding:11px 12px; color:var(--mut); font-size:13px}
+  /* シグナル判定 */
+  .sig{background:var(--card2); border:1px solid var(--line); border-radius:8px; padding:9px 11px; margin-bottom:6px}
+  .sig summary{list-style:none; display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer; flex-wrap:wrap}
+  .sig summary::-webkit-details-marker{display:none}
+  .sig summary .rd{color:var(--mut); font-size:12px}
+  .sig .h{font-size:12px; color:var(--mut); margin-top:8px; line-height:1.7; padding-top:6px; border-top:1px dashed var(--line)}
   /* トグルスイッチ */
   .sw{position:relative; display:inline-block; width:50px; height:28px}
   .sw input{opacity:0; width:0; height:0}
@@ -183,6 +189,12 @@
       <div class="kv"><span class="mut">勢い RSI(14)</span><span class="r" id="k-rsi"></span></div>
       <div class="kv"><span class="mut">値動き ATR(14)</span><span class="r" id="k-atr"></span></div>
       <div class="kv"><span class="mut">リスク／リワード</span><span class="r" id="k-rr"></span></div>
+    </div>
+
+    <div style="margin-top:12px; padding-top:10px; border-top:1px solid var(--line)">
+      <div style="font-weight:700; font-size:13px; margin-bottom:8px">📊 シグナル判定 <span id="sigSummary" style="font-weight:400; font-size:12px"></span></div>
+      <div id="sigList"></div>
+      <div class="hint">各行をタップすると「その指標が何か」をやさしく解説します。複数の🟢が重なるほど買い寄り。</div>
     </div>
 
     <div style="margin-top:12px; padding-top:10px; border-top:1px solid var(--line)">
@@ -407,6 +419,62 @@ function detectCross(c, nf, ns, look=7){
 const fmt=x=> x==null?'—' : (Math.abs(x)>=1000? Math.round(x).toLocaleString() : x.toFixed(1));
 const tag=(k,t)=>`<span class="tag ${k}">${t}</span>`;
 
+// 追加指標
+function emaSeries(a,n){ const out=[]; const k=2/(n+1); let e=null;
+  for(let i=0;i<a.length;i++){ if(i<n-1){out.push(null);continue;} e=(e===null)?avg(a.slice(i-n+1,i+1)):a[i]*k+e*(1-k); out.push(e);} return out; }
+function stddev(a,n){ if(a.length<n)return null; const s=a.slice(-n),m=avg(s); return Math.sqrt(avg(s.map(x=>(x-m)**2))); }
+function macdCalc(closes){
+  const e12=emaSeries(closes,12), e26=emaSeries(closes,26);
+  const arr=e12.map((v,i)=>(v!=null&&e26[i]!=null)?v-e26[i]:null).filter(v=>v!=null);
+  if(arr.length<10) return null;
+  const sig=emaSeries(arr,9); return {macd:arr[arr.length-1], signal:sig[sig.length-1]};
+}
+// 各指標を 買い/売り/中立 + やさしい一言 + 解説 に翻訳
+function computeSignals(m){
+  const closes=m.closes, px=closes[closes.length-1], out=[];
+  const B=(b,name,r,help)=>out.push({b,name,r,help});
+  // 移動平均トレンド
+  B(m.shortUp?'buy':m.shortDn?'sell':'neutral','移動平均トレンド',
+    m.shortUp?'短期が上向き（順張りしやすい）':m.shortDn?'短期が下向き（逆風）':'方向感が乏しい',
+    '5日線と25日線の並び。価格＞5日線＞25日線なら上昇基調。株価がどちらへ動いているかの基本。');
+  // GC/DC
+  B(m.cross?.type==='gc'?'buy':m.cross?.type==='dc'?'sell':'neutral','ゴールデン/デッド',
+    m.cross?.type==='gc'?'直近で上抜け（上昇転換）':m.cross?.type==='dc'?'直近で下抜け（下降転換）':'直近クロスなし',
+    '短期線が長期線を上抜け＝ゴールデンクロス（買いサイン）、下抜け＝デッドクロス（売りサイン）。');
+  // RSI
+  B(m.rsi>=70?'sell':m.rsi<=30?'buy':'neutral','RSI（勢い）',
+    m.rsi==null?'—':m.rsi>=70?`${m.rsi.toFixed(0)}＝買われすぎ`:m.rsi<=30?`${m.rsi.toFixed(0)}＝売られすぎ`:`${m.rsi.toFixed(0)}＝中立`,
+    '0〜100で「買われすぎ/売られすぎ」を示す。70超は過熱（反落注意）、30割れは売られすぎ（反発期待）。');
+  // MACD
+  const M=macdCalc(closes);
+  if(M){ const buy=M.macd>M.signal;
+    B(buy&&M.macd>0?'buy':(!buy&&M.macd<0?'sell':'neutral'),'MACD',
+      buy?(M.macd>0?'上昇の勢いが出ている':'下げ止まり・反転の兆し'):(M.macd<0?'下降の勢い':'勢いが鈍化'),
+      '2本の移動平均の差で「勢いと転換」を見る。MACDが上向き＆プラスは上昇の勢い、下向き＆マイナスは下落。'); }
+  // ボリンジャーバンド
+  const mid=sma(closes,20), sd=stddev(closes,20);
+  if(mid&&sd){ const up=mid+2*sd, lo=mid-2*sd, pb=(px-lo)/(up-lo)*100;
+    B(pb>=95?'sell':pb<=5?'buy':pb<30?'buy':'neutral','ボリンジャーバンド',
+      pb>=95?'上限タッチ＝短期過熱':pb<=5?'下限タッチ＝拾い場候補':pb<30?'下寄り＝押し目圏':pb>70?'上寄り':'中央',
+      '価格が動く「幅」の上限・下限を示す帯。下限付近は割安/反発、上限付近は割高/過熱の目安。'); }
+  // 移動平均乖離率(25日)
+  const s25=sma(closes,25);
+  if(s25){ const dev=(px-s25)/s25*100;
+    B(dev>=15?'sell':dev<=-15?'buy':'neutral','移動平均乖離',
+      dev>=15?`25日線から+${dev.toFixed(0)}%（上げすぎ・反落注意）`:dev<=-15?`${dev.toFixed(0)}%（下げすぎ・反発期待）`:`±${Math.abs(dev).toFixed(0)}%（標準範囲）`,
+      '株価が25日線からどれだけ離れたか。離れすぎると元に戻ろうとする力が働きやすい（行き過ぎの目安）。'); }
+  // 52週レンジ内の位置
+  const win=closes.slice(-250), lo52=Math.min(...win), hi52=Math.max(...win), pos=(px-lo52)/((hi52-lo52)||1)*100;
+  B(pos>=90?'buy':'neutral','52週レンジ',
+    pos>=90?'高値圏＝強い（ただし高値警戒）':pos<=10?'安値圏＝底値or弱い':`レンジの${pos.toFixed(0)}%の位置`,
+    '直近1年の高値〜安値のどこにいるか。高値圏＝強い銘柄の証拠だが高値づかみ注意、安値圏＝割安or弱い。');
+  // 出来高
+  if(m.vRatio!=null) B(m.vRatio>=1.5?'buy':'neutral','出来高',
+    m.vRatio>=1.5?`25日平均の${m.vRatio.toFixed(1)}倍＝注目集中`:m.vRatio<=0.6?'閑散（様子見）':'平常',
+    '売買の活発さ。急増は注目度アップ（大きく動く前兆になりやすい）。方向は価格と合わせて判断。');
+  return out;
+}
+
 // ================= スタイル =================
 const STYLE={
   short:{atrK:1.5, rr:1.8, nf:5,  ns:25,  cf:5,  cs:25, clamp:[2,6],  label:'短期'},
@@ -627,8 +695,21 @@ function render(d){
   document.getElementById('asof').textContent=`データ源: ${d.src||'—'} ／ 基準: ${dt.toLocaleString('ja-JP')} ／ 直近${d.rows.length}営業日`;
 
   window.lastM=m; window.lastCode=d.code;
+  renderSignals(m);
   drawChart(d.rows, m.sl, m.tp, m.entry);
   calcSize();
+}
+
+function renderSignals(m){
+  const sigs=computeSignals(m);
+  const cls={buy:'up', sell:'down', neutral:'flat'}, lab={buy:'買い', sell:'売り', neutral:'中立'};
+  document.getElementById('sigList').innerHTML = sigs.map(s=>
+    `<details class="sig"><summary>${tag(cls[s.b],lab[s.b])}<b>${s.name}</b><span class="rd">${s.r}</span></summary><div class="h">${s.help}</div></details>`
+  ).join('');
+  const buy=sigs.filter(s=>s.b==='buy').length, sell=sigs.filter(s=>s.b==='sell').length, neu=sigs.length-buy-sell;
+  const lean = buy>=sell+2?'買い優勢':sell>=buy+2?'売り優勢':buy>sell?'やや買い':sell>buy?'やや売り':'中立';
+  const lc = buy>sell?'var(--up)':sell>buy?'var(--down)':'var(--mut)';
+  document.getElementById('sigSummary').innerHTML=`🟢${buy} 🔴${sell} ⚪${neu} → <b style="color:${lc}">${lean}</b>`;
 }
 
 function showErr(msg){ const e=document.getElementById('err'); e.textContent=msg; e.style.display=msg?'block':'none'; }
