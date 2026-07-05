@@ -3,7 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>日本株 売買プランナー</title>
+<title>日本株 売買プランナー | INCOMEBASE</title>
+<meta name="description" content="銘柄コード/名前で検索、トレンド・売買サイン・利確損切り・日経225中長期スクリーニングまで。INCOMEBASE提供の無料株式分析ツール。">
+<meta property="og:type" content="website">
+<meta property="og:title" content="📈 日本株 売買プランナー | INCOMEBASE">
+<meta property="og:description" content="銘柄検索・売買サイン判定・利確損切り・日経225中長期発掘スクリーニング。無料の株式分析ツール。">
+<meta property="og:site_name" content="INCOMEBASE">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="📈 日本株 売買プランナー | INCOMEBASE">
+<meta name="twitter:description" content="銘柄検索・売買サイン・利確損切り・日経225スクリーニング。INCOMEBASE提供。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23000700'/%3E%3Ctext x='16' y='23' font-size='20' text-anchor='middle' fill='%2300ff66'%3E%F0%9F%93%88%3C/text%3E%3C/svg%3E">
+<link rel="canonical" href="https://kabu.incomebase.jp/">
+<meta property="og:url" content="https://kabu.incomebase.jp/">
 <style>
   :root{
     --bg:#000700; --card:#04140a; --card2:#02170c; --line:#0f4020;
@@ -600,8 +611,9 @@ document.querySelectorAll('#style button').forEach(b=>b.onclick=()=>{
 
 // ================= データ取得 =================
 // 複数のCORSプロキシを順に試し、生テキストを返す
+const DEFAULT_PROXY='https://kabu-proxy.incomebase0108.workers.dev'; // 配布用の共有プロキシ(Cloudflare Worker)
 function proxyRoutes(){
-  const custom=(localStorage.getItem('toushi_proxy')||'').trim();
+  const custom=(localStorage.getItem('toushi_proxy')||'').trim() || DEFAULT_PROXY;
   const list=[];
   if(custom) list.push(u=>`${custom}${custom.includes('?')?'&':'?'}url=${encodeURIComponent(u)}`);
   list.push(
