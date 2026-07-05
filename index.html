@@ -424,7 +424,7 @@
       <div><label>損切り(任意)</label><input id="hsl" inputmode="decimal" placeholder="自動"></div>
       <div style="display:flex; align-items:flex-end"><button class="btn" style="margin:0" onclick="addHold()">＋ 保有に登録</button></div>
     </div>
-    <div class="hint">目標・損切りが空なら、買値とスタイル（短期/中期/長期）から自動設定します。</div>
+    <div class="hint">目標・損切りが空なら自動設定。既定は<b>📈追従</b>＝チャートに合わせ<b>毎日再計算</b>（上昇で損切りが切り上がるトレイリング／下げても損切りは下がらず利益を守る）。各行の <b>📈追従/🔒固定</b> ボタンで切替、<b>✎</b>で手動指定も可。</div>
     <button class="btn ghost sm" style="width:100%; margin-top:10px" onclick="refreshHolds()">🔄 損益・アラートを更新</button>
   </div>
 
@@ -838,9 +838,14 @@ function render(d){
   if(m.rsi>=75) v+=' ただしRSI高く<b>過熱感</b>あり飛びつき注意。';
   if(m.rsi<=25) v+=' RSI低く<b>反発狙い</b>の位置でもある。';
   const entryTxt = m.pullback
-    ? `現在 <b>${fmt(m.px)}円</b>。<b>${fmt(m.entry)}円</b>まで押したら買い候補（指値向き）。`
-    : `現在 <b>${fmt(m.px)}円</b>で買い目安圏。`;
-  document.getElementById('verdict').innerHTML=`${tag(cls,'総合')}${entryTxt} ${v}`;
+    ? `現在 <b>¥${fmt(m.px)}</b>。<b>¥${fmt(m.entry)}</b>まで押したら買い（指値）。`
+    : `現在 <b>¥${fmt(m.px)}</b>、買い目安圏。`;
+  const rule = `<div style="margin-top:8px; padding:8px 10px; background:var(--card2); border-radius:8px; line-height:1.9">`
+    +`① <b style="color:var(--acc)">¥${fmt(m.entry)}</b> で買う<br>`
+    +`② 上がって <b style="color:var(--up)">¥${fmt(m.tp)}</b> に届いたら<b>利確（売り）</b><br>`
+    +`③ 下がって <b style="color:var(--down)">¥${fmt(m.sl)}</b> を割ったら<b>損切り（売り）</b>`
+    +`</div>`;
+  document.getElementById('verdict').innerHTML=`${tag(cls,'総合')}${entryTxt} ${v}${rule}`;
 
   const dt=new Date((d.meta.regularMarketTime||d.rows[d.rows.length-1].t)*1000);
   document.getElementById('asof').textContent=`データ源: ${d.src||'—'} ／ 基準: ${dt.toLocaleString('ja-JP')} ／ 直近${d.rows.length}営業日`;
@@ -1355,13 +1360,21 @@ function delHold(c){ setHolds(getHolds().filter(x=>x.code!==c)); renderHolds(); 
 function toggleHold(c){
   const h=getHolds(); const x=h.find(v=>v.code===c); if(x){ x.on=!x.on; setHolds(h); } refreshHolds();
 }
-// 目標・損切りの実効値（未設定なら買値とスタイルから自動）
-function effTargets(h){
-  const S=STYLE[curStyle];
-  const def={short:3,swing:5,long:8}[curStyle];
-  const sl = h.sl>0 ? h.sl : h.entry*(1-def/100);
-  const tp = h.tp>0 ? h.tp : h.entry*(1+def*S.rr/100);
-  return {tp, sl};
+// 目標・損切りの実効値
+//  手動(h.tp/h.sl指定) > テクニカル追従(現在チャートmから毎日再計算) > 固定%(買値基準)
+function effTargets(h, m){
+  const S=STYLE[curStyle], def={short:3,swing:5,long:8}[curStyle];
+  const useTech = h.mode!=='fixed' && m;
+  let sl, tp, mode;
+  if(h.sl>0) sl=h.sl; else if(useTech) sl=m.sl; else sl=h.entry*(1-def/100);
+  if(h.tp>0) tp=h.tp; else if(useTech) tp=Math.max(m.recHigh, m.tp); else tp=h.entry*(1+def*S.rr/100);
+  mode = (h.sl>0||h.tp>0) ? 'manual' : (useTech ? 'tech' : 'fixed');
+  return {sl, tp, mode};
+}
+function toggleHoldMode(c){
+  const h=getHolds(); const x=h.find(v=>v.code===c);
+  if(x){ x.mode = x.mode==='fixed'?undefined:'fixed'; delete x.trailSL; setHolds(h); }
+  renderHolds();
 }
 let editingHold=null;
 function editHold(c){ editingHold=c; renderHolds(); }
@@ -1396,14 +1409,16 @@ function renderHolds(){
         <div class="hint">空欄で保存すると自動設定に戻ります。急落・急騰時はここで手動調整を。</div>
       </div>`;
     }
+    const modeMk = x.mode==='fixed'?'🔒固定':'📈追従';
     return `<div class="wrow hrow" id="h-${x.code}">
       <div class="nm" onclick="loadFromWatch('${x.code}')">
         <div class="c">${jpName(x.code)||x.code}</div>
-        <div class="s">買${fmt(x.entry)}${x.qty?`×${x.qty}`:''}　🎯${fmt(tp)} / 🛑${fmt(sl)}</div>
+        <div class="s" id="hsub-${x.code}">買${fmt(x.entry)}${x.qty?`×${x.qty}`:''}　🎯${fmt(tp)} / 🛑${fmt(sl)}</div>
       </div>
       <div class="st" id="hst-${x.code}"><span class="tag flat">…</span></div>
       <div class="pr"><div class="p" id="hpx-${x.code}">—</div><div class="pl" id="hpl-${x.code}"></div></div>
-      <button class="del" onclick="editHold('${x.code}')" title="目標を変更">✎</button>
+      <button class="del" onclick="toggleHoldMode('${x.code}')" title="損切り方式(追従/固定)切替" style="font-size:11px">${modeMk}</button>
+      <button class="del" onclick="editHold('${x.code}')" title="目標を手動変更">✎</button>
       <label class="sw" style="transform:scale(.66)"><input type="checkbox" ${x.on?'checked':''} onchange="toggleHold('${x.code}')"><span class="sl"></span></label>
       <button class="del" onclick="delHold('${x.code}')" title="売却/削除">✕</button>
     </div>`;
@@ -1412,12 +1427,20 @@ function renderHolds(){
 }
 async function refreshHolds(){
   const h=getHolds(); if(!h.length) return;
-  const fired=[];
+  const fired=[]; let dirty=false;
   for(const x of h){
     const D=await fetchData(x.code);
     if(!D){ setTxt(`hpx-${x.code}`,'取得失敗'); continue; }
     const m=computeMetrics(D.rows, D.meta, curStyle);
-    const {tp,sl}=effTargets(x);
+    let {tp,sl,mode}=effTargets(x, m);
+    // テクニカル追従はトレイリング: 損切りは切り上がるが下がらない(利益を守る)。現在値未満に保つ。
+    if(mode==='tech'){
+      let cand=Math.min(sl, m.px*0.995);
+      sl=Math.max(x.trailSL||cand, cand); sl=Math.min(sl, m.px*0.995);
+      if(x.trailSL!==sl){ x.trailSL=sl; dirty=true; }
+    }
+    const modeMk = x.mode==='fixed'?'🔒固定':(mode==='manual'?'✋手動':'📈追従');
+    setTxt(`hsub-${x.code}`, `買${fmt(x.entry)}${x.qty?`×${x.qty}`:''}　🎯${fmt(tp)} / 🛑${fmt(sl)} ${modeMk}`);
     setTxt(`hpx-${x.code}`, fmt(m.px)+'円');
     const plp=(m.px-x.entry)/x.entry*100;
     const plEl=document.getElementById(`hpl-${x.code}`);
@@ -1436,6 +1459,7 @@ async function refreshHolds(){
     setHtml(`hst-${x.code}`, st);
     if(sev>=2 && x.on && alertsEnabled()) fired.push({code:x.code, name:jpName(x.code)||x.code, px:m.px, tp, sl, up:m.px>=tp});
   }
+  if(dirty) setHolds(h);
   // アラート表示＋通知
   const bar=document.getElementById('alertBar');
   if(fired.length){
