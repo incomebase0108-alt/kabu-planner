@@ -177,7 +177,9 @@
   .clock button{background:none; border:0; color:var(--acc); font-size:13px; padding:0 2px; cursor:pointer}
   /* ===== 起動演出 ===== */
   #boot{position:fixed; inset:0; z-index:10000; background:#000400; display:flex; flex-direction:column;
-    align-items:center; justify-content:center; gap:6px; transition:opacity .6s; font-family:var(--mono)}
+    align-items:center; justify-content:center; gap:6px; transition:opacity .6s; font-family:var(--mono);
+    animation:bootout .8s ease 4s forwards}
+  @keyframes bootout{to{opacity:0; visibility:hidden}}
   #boot.done{opacity:0; pointer-events:none}
   .bootlogo{font-size:34px; font-weight:900; color:var(--acc); letter-spacing:4px; text-shadow:0 0 20px rgba(0,255,102,.8);
     animation:flicker 1.2s infinite}
@@ -1103,7 +1105,8 @@ function buildTicker(){
   const body=items.join('　｜　');
   inner.innerHTML=`${brand}　${body}　${brand}　${body}`;
 }
-buildTicker();
+// scanResults は後段で宣言されるため、初期化完了後に実行（TDZ回避）
+setTimeout(buildTicker, 0);
 
 // ================= 起動演出 =================
 (function boot(){
