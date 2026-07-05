@@ -407,6 +407,7 @@
     <div class="hint num" id="scanProg" style="margin-top:8px"></div>
     <div class="hint">※ 約1〜2分・通信量やや多め。Wi-Fi推奨。株価は約15〜20分遅延。</div>
     <div class="seg" id="lens" style="margin-top:12px; flex-wrap:wrap; font-size:13px">
+      <button data-v="now" onclick="setLens('now')">🛒今買い</button>
       <button data-v="total" class="on" onclick="setLens('total')">総合</button>
       <button data-v="mom" onclick="setLens('mom')">🔥勢い</button>
       <button data-v="pull" onclick="setLens('pull')">🌱押し目</button>
@@ -1356,7 +1357,15 @@ function screenScore(rows, code){
   const win=closes.slice(-250), lo52=Math.min(...win), hi52=Math.max(...win);
   const pos=(px-lo52)/((hi52-lo52)||1)*100;
   const uptrend = !!(m.sma75 && px>m.sma75) && sc>0;
-  return {code, px, mom, rsi:m.rsi, score:sc, tags, buy, sell, dev, bbPos:Math.round(bbPos), pos:Math.round(pos), gc:m.cross?.type==='gc', uptrend};
+  // 「今日の価格で買い推奨」判定: 上昇中で (a)支持線まで押した(乖離<1.5%) or (b)新高値ブレイク中
+  const highs2=rows.map(r=>r.h), lows2=rows.map(r=>r.l);
+  const L=planLevels(closes, highs2, lows2, curStyle);
+  const distSup=(px-L.entry)/px*100;
+  const closeHigh20=Math.max(...closes.slice(-20));           // 終値ベースの直近高値
+  const atNewHigh = px>=closeHigh20*0.998;                    // 今日がほぼ最高終値＝ブレイク中
+  const buyNow = (m.shortUp||m.longUp) && sc>0 && (distSup<1.5 || atNewHigh);
+  if(buyNow) tags.unshift(atNewHigh?'新高値':'支持圏');
+  return {code, px, mom, rsi:m.rsi, score:sc, tags, buy, sell, dev, bbPos:Math.round(bbPos), pos:Math.round(pos), gc:m.cross?.type==='gc', uptrend, buyNow};
 }
 async function screenAll(){
   if(scanning) return; scanning=true;
@@ -1386,6 +1395,7 @@ async function screenAll(){
   try{ localStorage.setItem('toushi_scan', JSON.stringify({t:Date.now(), r:scanResults.slice(0,40)})); }catch(e){}
 }
 const LENS={
+  now:  {d:'🛒 今日の価格で買い推奨（上昇中で支持圏まで押した or 新高値ブレイク中）— 該当ゼロの日もあります（それが正常）', f:a=>a.filter(r=>r.buyNow).sort((x,y)=>y.score-x.score)},
   total:{d:'総合スコア順（多角的に強い銘柄）', f:a=>a.slice().sort((x,y)=>y.score-x.score||y.mom-x.mom)},
   mom:  {d:'🔥 3ヶ月の上昇率が大きい順（勢い・急騰株）', f:a=>a.slice().sort((x,y)=>y.mom-x.mom)},
   pull: {d:'🌱 上昇トレンドで今は下寄り＝仕込み場候補（バンド下限に近い順）', f:a=>a.filter(r=>r.uptrend && (r.pos??0)>35).sort((x,y)=>(x.bbPos??50)-(y.bbPos??50))},
@@ -1475,7 +1485,7 @@ function planLevels(closes, highs, lows, styleKey){
   let sl=Math.min(recLow*0.995, entry-a*S.atrK);
   let rp=(entry-sl)/entry*100; rp=Math.max(S.clamp[0],Math.min(S.clamp[1],rp)); sl=entry*(1-rp/100);
   const tp=Math.max(entry+(entry-sl)*S.rr, recHigh);
-  return {sl, tp, recLow, recHigh, px};
+  return {sl, tp, recLow, recHigh, px, entry, shortUp};
 }
 // 目標・損切りの実効値
 //  手動(h.tp/h.sl指定) > テクニカル追従(現在チャートmから毎日再計算) > 固定%(買値基準)
