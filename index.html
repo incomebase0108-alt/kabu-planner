@@ -420,11 +420,12 @@
       <div><label>株数(任意)</label><input id="hqty" inputmode="numeric" placeholder="100"></div>
       <div><label>売り目標(任意)</label><input id="htp" inputmode="decimal" placeholder="自動"></div>
     </div>
-    <div class="adv" style="grid-template-columns:1fr 2fr; margin-top:8px">
+    <div class="adv" style="grid-template-columns:1fr 1fr; margin-top:8px">
       <div><label>損切り(任意)</label><input id="hsl" inputmode="decimal" placeholder="自動"></div>
-      <div style="display:flex; align-items:flex-end"><button class="btn" style="margin:0" onclick="addHold()">＋ 保有に登録</button></div>
+      <div><label>購入日(任意・後から登録時)</label><input id="hdate" type="date"></div>
     </div>
-    <div class="hint">目標・損切りが空なら自動設定。既定は<b>📈追従</b>＝チャートに合わせ<b>毎日再計算</b>（上昇で損切りが切り上がるトレイリング／下げても損切りは下がらず利益を守る）。各行の <b>📈追従/🔒固定</b> ボタンで切替、<b>✎</b>で手動指定も可。</div>
+    <button class="btn" style="margin-top:10px" onclick="addHold()">＋ 保有に登録</button>
+    <div class="hint">目標・損切りが空なら自動設定。既定は<b>📈追従</b>＝チャートに合わせ<b>毎日再計算</b>（上昇で損切りが切り上がるトレイリング／下げても下がらず利益を守る）。<b>購入日を入れると、その日のチャートから購入時ラインを算出し、購入日〜今日のトレイリングを遡って再現</b>します（数日後に登録してもズレません）。各行 <b>📈/🔒</b> で方式切替、<b>✎</b>で手動指定可。</div>
     <button class="btn ghost sm" style="width:100%; margin-top:10px" onclick="refreshHolds()">🔄 損益・アラートを更新</button>
   </div>
 
@@ -1350,15 +1351,32 @@ function addHold(){
   const qty=parseFloat(document.getElementById('hqty').value)||null;
   const tp=parseFloat(document.getElementById('htp').value)||null;
   const sl=parseFloat(document.getElementById('hsl').value)||null;
+  const dv=document.getElementById('hdate').value;
+  const buyDate = dv ? new Date(dv+'T15:00:00+09:00').getTime() : Date.now();
   const h=getHolds().filter(x=>x.code!==code);
-  h.push({code, entry, qty, tp, sl, on:true, since:Date.now()});
+  h.push({code, entry, qty, tp, sl, on:true, buyDate});
   setHolds(h);
-  ['hcode','hentry','hqty','htp','hsl'].forEach(id=>document.getElementById(id).value='');
+  ['hcode','hentry','hqty','htp','hsl','hdate'].forEach(id=>document.getElementById(id).value='');
   renderHolds();
 }
 function delHold(c){ setHolds(getHolds().filter(x=>x.code!==c)); renderHolds(); }
 function toggleHold(c){
   const h=getHolds(); const x=h.find(v=>v.code===c); if(x){ x.on=!x.on; setHolds(h); } refreshHolds();
+}
+// 任意日時点の売買レベルを算出（過去日の購入時ライン/トレイリング再現に使用）
+function planLevels(closes, highs, lows, styleKey){
+  const S=STYLE[styleKey], px=closes[closes.length-1];
+  if(closes.length<26){ const rp=S.clamp[0]; return {sl:px*(1-rp/100), tp:px*(1+rp*S.rr/100), px}; }
+  const sma5=sma(closes,5), sma25=sma(closes,25), a=atr(highs,lows,closes,14)||px*0.02;
+  const N=Math.min(20,closes.length);
+  const recLow=Math.min(...lows.slice(-N)), recHigh=Math.max(...highs.slice(-N));
+  const shortUp=sma5&&sma25?(px>sma5&&sma5>sma25):(px>sma5);
+  const support=Math.max(sma25||0, recLow, px-a*S.atrK);
+  let entry=(shortUp && support<px*0.998)?support:px;
+  let sl=Math.min(recLow*0.995, entry-a*S.atrK);
+  let rp=(entry-sl)/entry*100; rp=Math.max(S.clamp[0],Math.min(S.clamp[1],rp)); sl=entry*(1-rp/100);
+  const tp=Math.max(entry+(entry-sl)*S.rr, recHigh);
+  return {sl, tp, recLow, recHigh, px};
 }
 // 目標・損切りの実効値
 //  手動(h.tp/h.sl指定) > テクニカル追従(現在チャートmから毎日再計算) > 固定%(買値基準)
@@ -1433,19 +1451,28 @@ async function refreshHolds(){
     if(!D){ setTxt(`hpx-${x.code}`,'取得失敗'); continue; }
     const m=computeMetrics(D.rows, D.meta, curStyle);
     let {tp,sl,mode}=effTargets(x, m);
-    // テクニカル追従はトレイリング: 損切りは切り上がるが下がらない(利益を守る)。現在値未満に保つ。
     if(mode==='tech'){
-      let cand=Math.min(sl, m.px*0.995);
-      sl=Math.max(x.trailSL||cand, cand); sl=Math.min(sl, m.px*0.995);
-      if(x.trailSL!==sl){ x.trailSL=sl; dirty=true; }
-    }
-    // 登録時ラインを初回に記録（"流れ"の起点）
-    if(x.tp0==null||x.sl0==null){ x.tp0=tp; x.sl0=sl; dirty=true; }
+      // 購入日を起点に、購入時ライン＆トレイリングを日足から遡って再現
+      const rows=D.rows, cl=rows.map(r=>r.c), hi=rows.map(r=>r.h), lo=rows.map(r=>r.l), ts=rows.map(r=>r.t);
+      const bt=(x.buyDate||Date.now())/1000;
+      let bi=ts.findIndex(t=>t>=bt); if(bi<0) bi=rows.length-1;
+      if(x.tp0==null||x.sl0==null){
+        const L0=planLevels(cl.slice(0,bi+1),hi.slice(0,bi+1),lo.slice(0,bi+1),curStyle);
+        x.tp0=L0.tp; x.sl0=L0.sl; dirty=true;
+      }
+      let trail=x.sl0;
+      for(let i=bi;i<rows.length;i++){
+        const L=planLevels(cl.slice(0,i+1),hi.slice(0,i+1),lo.slice(0,i+1),curStyle);
+        trail=Math.max(trail, Math.min(L.sl, cl[i]*0.995));
+      }
+      sl=Math.min(trail, m.px*0.995);
+      tp=Math.max(m.recHigh, m.tp);
+    } else if(x.tp0==null||x.sl0==null){ x.tp0=tp; x.sl0=sl; dirty=true; }
     const modeMk = x.mode==='fixed'?'🔒固定':(mode==='manual'?'✋手動':'📈追従');
-    const days = x.since ? Math.floor((Date.now()-x.since)/86400000) : null;
+    const days = x.buyDate ? Math.floor((Date.now()-x.buyDate)/86400000) : null;
     const held = days!=null ? `・${days}日保有` : '';
     const trailUp = (x.sl0!=null && sl>x.sl0+0.5) ? ` <span style="color:var(--up)">🛑▲${fmt(sl-x.sl0)}</span>` : '';
-    const flow = `<span style="color:var(--mut)">登録時</span> 🎯${fmt(x.tp0)}/🛑${fmt(x.sl0)} <span style="color:var(--acc)">→</span> <span style="color:var(--mut)">現在</span> 🎯${fmt(tp)}/🛑${fmt(sl)}${trailUp}`;
+    const flow = `<span style="color:var(--mut)">購入時</span> 🎯${fmt(x.tp0)}/🛑${fmt(x.sl0)} <span style="color:var(--acc)">→</span> <span style="color:var(--mut)">現在</span> 🎯${fmt(tp)}/🛑${fmt(sl)}${trailUp}`;
     setHtml(`hsub-${x.code}`, `買¥${fmt(x.entry)}${x.qty?` ×${x.qty}`:''}${held} ${modeMk}<br>${flow}`);
     setTxt(`hpx-${x.code}`, fmt(m.px)+'円');
     const plp=(m.px-x.entry)/x.entry*100;
