@@ -280,6 +280,14 @@
       </div>
     </div>
 
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px">
+      <span class="hint" style="margin:0">判定・シグナルは日足ベース</span>
+      <div class="seg" id="tfseg" style="width:auto">
+        <button data-v="D" class="on" onclick="setTF('D')" style="flex:none; padding:6px 12px; font-size:12px">日足</button>
+        <button data-v="W" onclick="setTF('W')" style="flex:none; padding:6px 12px; font-size:12px">週足</button>
+        <button data-v="M" onclick="setTF('M')" style="flex:none; padding:6px 12px; font-size:12px">月足</button>
+      </div>
+    </div>
     <canvas id="chart" width="560" height="200"></canvas>
 
     <div class="plan">
@@ -691,8 +699,8 @@ function toRows(R){
            .filter(x=>x.c!=null && x.h!=null && x.l!=null);
 }
 // Yahoo Finance（分足現在値つき）
-async function fetchYahoo(code){
-  const u=`https://query1.finance.yahoo.com/v8/finance/chart/${code}.T?range=1y&interval=1d`;
+async function fetchYahoo(code, range='2y'){
+  const u=`https://query1.finance.yahoo.com/v8/finance/chart/${code}.T?range=${range}&interval=1d`;
   const t=await proxiedText(u);
   if(!t) return null;
   try{
@@ -714,9 +722,9 @@ async function fetchStooq(code){
   const last=rows[rows.length-1], prev=rows[rows.length-2];
   return {rows, meta:{regularMarketPrice:last.c, previousClose:prev.c, shortName:code, symbol:code, regularMarketTime:last.t}, src:'Stooq'};
 }
-// Yahoo→Stooq の順で取得
-async function fetchData(code){
-  return (await fetchYahoo(code)) || (await fetchStooq(code));
+// Yahoo→Stooq の順で取得（rangeは詳細=2年/スキャン等=1年）
+async function fetchData(code, range='2y'){
+  return (await fetchYahoo(code, range)) || (await fetchStooq(code));
 }
 
 // ================= 指標まとめ =================
@@ -1063,12 +1071,30 @@ function runManual(){
 }
 
 // ================= チャート(ローソク足+出来高) =================
+let chartTF='D'; // D=日足 W=週足 M=月足
+function resampleRows(rows, tf){
+  if(tf==='D') return rows;
+  const out=[]; let cur=null, key=null;
+  for(const r of rows){
+    const d=new Date(r.t*1000);
+    const k = tf==='W' ? Math.floor((r.t/86400+4)/7) : d.getUTCFullYear()*12+d.getUTCMonth();
+    if(k!==key){ if(cur) out.push(cur); key=k; cur={t:r.t, o:(r.o??r.c), h:r.h, l:r.l, c:r.c, v:r.v||0}; }
+    else { cur.h=Math.max(cur.h,r.h); cur.l=Math.min(cur.l,r.l); cur.c=r.c; cur.t=r.t; cur.v+=(r.v||0); }
+  }
+  if(cur) out.push(cur);
+  return out;
+}
+function setTF(tf){
+  chartTF=tf;
+  document.querySelectorAll('#tfseg button').forEach(b=>b.classList.toggle('on', b.dataset.v===tf));
+  if(lastData && window.lastM) drawChart(lastData.rows, window.lastM.sl, window.lastM.tp, window.lastM.entry);
+}
 function clearChart(){ const cv=document.getElementById('chart'); cv.getContext('2d').clearRect(0,0,cv.width,cv.height); }
 function drawChart(rows, sl, tp, entry){
   const cv=document.getElementById('chart'), ctx=cv.getContext('2d');
   const W=cv.width, H=cv.height, pad=8, VH=34, PH=H-VH-4; ctx.clearRect(0,0,W,H);
   if(!rows || rows.length<2) return;
-  const view=rows.slice(-90);
+  const view=resampleRows(rows, chartTF).slice(-90);
   const RT=44; // 右の価格ラベル余白
   let mn=Infinity, mx=-Infinity;
   view.forEach(r=>{ if(r.l<mn)mn=r.l; if(r.h>mx)mx=r.h; });
@@ -1163,7 +1189,7 @@ async function refreshWatch(){
   const w=getWatch();
   for(const x of w){
     const c=x.code;
-    const D=await fetchData(c);
+    const D=await fetchData(c,'1y');
     if(!D){ setTxt(`wp-${c}`,'取得失敗'); setTxt(`wt-${c}`,''); continue; }
     const m=computeMetrics(D.rows, D.meta, curStyle);
     setTxt(`wn-${c}`, x.buy?`🎯買い目標 ¥${fmt(x.buy)}`:(jpName(c)||'—'));
@@ -1393,7 +1419,7 @@ async function screenAll(){
   for(let i=0;i<N225.length;i+=B){
     const batch=N225.slice(i,i+B);
     const rs=await Promise.all(batch.map(async c=>{
-      const D=await fetchData(c); if(!D) return null;
+      const D=await fetchData(c,'1y'); if(!D) return null;
       return screenScore(D.rows, c);
     }));
     rs.forEach(r=>{ if(r) scanResults.push(r); });
@@ -1575,7 +1601,7 @@ async function refreshHolds(){
   const h=getHolds(); if(!h.length) return;
   const fired=[]; let dirty=false;
   for(const x of h){
-    const D=await fetchData(x.code);
+    const D=await fetchData(x.code,'1y');
     if(!D){ setTxt(`hpx-${x.code}`,'取得失敗'); continue; }
     const m=computeMetrics(D.rows, D.meta, curStyle);
     let {tp,sl,mode}=effTargets(x, m);
