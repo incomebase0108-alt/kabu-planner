@@ -812,21 +812,31 @@ function render(d){
   // エントリー戦略を先に確定し、買い/利確/損切りの箱を推奨エントリーに合わせる
   const strat = entryStrategy(m); m._strat = strat;
   m.entry = strat.recEntry;                                   // 押し目が遠い時は成行/ブレイク価格に
-  m.tp = Math.max(m.recHigh, m.entry + (m.entry - m.sl)*m.rr);
+  // 損切り・利確をエントリー基準で再計算（ATR＝1日の値動きに係留し、スタイルのclampで現実的な幅に）
+  const atrv2 = m.atr || m.entry*0.02;
+  let rp2 = atrv2*S.atrK/m.entry*100;
+  rp2 = Math.max(S.clamp[0], Math.min(S.clamp[1], rp2));
+  const manualRp=parseFloat(document.getElementById('riskPct').value);
+  if(manualRp>0) rp2=manualRp;
+  m.sl = m.entry*(1-rp2/100);
+  const tpBase = m.entry + (m.entry-m.sl)*m.rr;
+  m.tp = (m.entry < m.px) ? Math.max(tpBase, Math.min(m.recHigh, m.entry*1.25)) : tpBase; // 押し目買い時のみ直近高値も参照
   m.entryPct=(m.entry-m.px)/m.px*100;
   m.pullback = m.entry < m.px*0.999;
   m.tpPct=(m.tp-m.entry)/m.entry*100;
   m.slPct=(m.entry-m.sl)/m.entry*100;
   m.riskPct=m.slPct;
+  // ATR換算「何日分の値動きか」＝現実味の物差し
+  const dTP=(m.tp-m.entry)/atrv2, dSL=(m.entry-m.sl)/atrv2, dEN=Math.abs(m.entry-m.px)/atrv2;
 
   document.getElementById('buy').textContent=fmt(m.entry);
   document.getElementById('tp').textContent=fmt(m.tp);
   document.getElementById('sl').textContent=fmt(m.sl);
   document.getElementById('buyd').textContent =
-    m.entryPct<-0.3 ? `現在比 ${m.entryPct.toFixed(1)}%（押し目）` :
-    m.entryPct>0.3  ? `現在比 +${m.entryPct.toFixed(1)}%（ブレイク）` : '現在値付近';
-  document.getElementById('tpd').textContent = `+${m.tpPct.toFixed(1)}%`;
-  document.getElementById('sld').textContent = `-${m.slPct.toFixed(1)}%`;
+    m.entryPct<-0.3 ? `${m.entryPct.toFixed(1)}%（押し目・約${dEN.toFixed(1)}日分）` :
+    m.entryPct>0.3  ? `+${m.entryPct.toFixed(1)}%（ブレイク・約${dEN.toFixed(1)}日分）` : '現在値付近';
+  document.getElementById('tpd').textContent = `+${m.tpPct.toFixed(1)}%（約${dTP.toFixed(1)}日分）`;
+  document.getElementById('sld').textContent = `-${m.slPct.toFixed(1)}%（約${dSL.toFixed(1)}日分）`;
   document.getElementById('entryOv').value = Math.round(m.entry);
 
   document.getElementById('short-tag').innerHTML=tag(m.shortUp?'up':m.shortDn?'down':'flat','短期 '+(m.shortUp?'上昇':m.shortDn?'下降':'もみ合い'));
@@ -865,11 +875,14 @@ function render(d){
   if(m.vRatio>=1.5) v+=' 出来高急増で<b>注目度が高い</b>。';
   if(m.rsi>=75) v+=' ただしRSI高く<b>過熱感</b>あり飛びつき注意。';
   if(m.rsi<=25) v+=' RSI低く<b>反発狙い</b>の位置でもある。';
+  const isBrk = m.entry > m.px*1.001;
   const entryTxt = m.pullback
     ? `現在 <b>¥${fmt(m.px)}</b>。<b>¥${fmt(m.entry)}</b>まで押したら買い（指値）。`
+    : isBrk
+    ? `現在 <b>¥${fmt(m.px)}</b>。<b>¥${fmt(m.entry)}</b>を超えたら買い（ブレイク）。`
     : `現在 <b>¥${fmt(m.px)}</b>、買い目安圏。`;
   const rule = `<div style="margin-top:8px; padding:8px 10px; background:var(--card2); border-radius:8px; line-height:1.9">`
-    +`① <b style="color:var(--acc)">¥${fmt(m.entry)}</b> で買う<br>`
+    +`① <b style="color:var(--acc)">¥${fmt(m.entry)}</b> ${isBrk?'を超えたら買う':'で買う'}<br>`
     +`② 上がって <b style="color:var(--up)">¥${fmt(m.tp)}</b> に届いたら<b>利確（売り）</b><br>`
     +`③ 下がって <b style="color:var(--down)">¥${fmt(m.sl)}</b> を割ったら<b>損切り（売り）</b>`
     +`</div>`;
