@@ -360,6 +360,19 @@
       <div class="hint">設定すると最優先で使います。空にして保存でクリア。作り方は付属の説明を参照。</div>
     </details>
   </div>
+
+  <div class="card">
+    <details id="data-wrap">
+      <summary>💾 データのバックアップ / 復元（別端末へ移す・保存）</summary>
+      <div class="hint">監視・保有・買いアラート・設定を保存/移行できます。<b>サーバーには送りません</b>（端末内＋この文字列だけ）。同じ端末なら自動保存されますが、機種変更や消えた時の備えにどうぞ。</div>
+      <textarea id="dataBox" placeholder="「書き出し」で文字列がここに出ます。別端末ではここに貼って「読み込み」。" style="width:100%; height:66px; background:var(--card2); border:1px solid var(--line); color:var(--tx); border-radius:8px; padding:8px; font-size:11px; font-family:var(--mono); margin-top:8px"></textarea>
+      <div class="row" style="margin-top:6px">
+        <button class="btn ghost sm" style="flex:1" onclick="exportData()">📤 書き出し</button>
+        <button class="btn ghost sm" style="flex:1" onclick="downloadData()">💾 ファイル保存</button>
+        <button class="btn ghost sm" style="flex:1" onclick="importData()">📥 読み込み</button>
+      </div>
+    </details>
+  </div>
 </div>
 
 <!-- ============ ウォッチリストタブ ============ -->
@@ -1103,6 +1116,29 @@ function loadFromWatch(c){
 }
 const setTxt=(id,t)=>{const e=document.getElementById(id); if(e)e.textContent=t;};
 const setHtml=(id,h)=>{const e=document.getElementById(id); if(e)e.innerHTML=h;};
+
+// ================= データ バックアップ/復元 =================
+const DKEYS=['toushi_watch','toushi_holds','toushi_alerts','toushi_proxy','toushi_snd'];
+function collectData(){ const d={}; DKEYS.forEach(k=>{ const v=localStorage.getItem(k); if(v!=null) d[k]=v; }); return d; }
+function exportData(){
+  const s=JSON.stringify(collectData());
+  const box=document.getElementById('dataBox'); box.value=s; box.focus(); box.select();
+  try{ navigator.clipboard&&navigator.clipboard.writeText(s); }catch(e){}
+  alert('書き出しました。この文字列をコピーして保存、または「💾ファイル保存」で保存 → 別端末で貼って「📥読み込み」。');
+}
+function downloadData(){
+  const blob=new Blob([JSON.stringify(collectData(),null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='kabu-backup.json'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),3000);
+}
+function importData(){
+  const s=(document.getElementById('dataBox').value||'').trim();
+  if(!s){ alert('復元する文字列を、上の枠に貼ってください。'); return; }
+  let d; try{ d=JSON.parse(s); }catch(e){ alert('文字列が正しくありません（コピー漏れの可能性）。'); return; }
+  if(!confirm('現在の監視・保有・設定を上書きして復元します。よろしいですか？')) return;
+  Object.keys(d).forEach(k=>{ if(DKEYS.includes(k) && d[k]!=null) localStorage.setItem(k, d[k]); });
+  alert('復元しました。画面を再読み込みします。'); location.reload();
+}
 
 // ================= 接続設定・診断 =================
 function saveProxy(){
