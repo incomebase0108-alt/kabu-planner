@@ -754,7 +754,9 @@ function computeMetrics(rows, meta, styleKey){
   const atrv = a || px*0.02;
   const N=Math.min(20, closes.length);
   const recLow=Math.min(...lows.slice(-N));   // 直近安値(支持)
-  const recHigh=Math.max(...highs.slice(-N)); // 直近高値(抵抗)
+  const recHigh=Math.max(...highs.slice(-N)); // 直近高値(抵抗・当日含む)
+  const hPrev=highs.slice(-(N+1),-1);
+  const recHighPrev=hPrev.length?Math.max(...hPrev):recHigh; // 前日以前の高値(ブレイク済み判定用)
   let rr=parseFloat(document.getElementById('rr').value)||S.rr;
 
   // 買い目安(エントリー): 上昇中は押し目=支持まで引く。支持圏/非上昇なら現在値。
@@ -781,7 +783,7 @@ function computeMetrics(rows, meta, styleKey){
 
   return {px,prev,chg,chgp,sma5,sma25,sma75,sma200,rsi:r,atr:a,vRatio,vLast,cross,
           shortUp,shortDn,longUp,longDn,riskPct,rr,sl,tp,buy,entry,pullback,entryPct,
-          tpPct,slPct,recLow,recHigh,closes};
+          tpPct,slPct,recLow,recHigh,recHighPrev,closes};
 }
 
 // ================= 詳細描画 =================
@@ -871,7 +873,10 @@ function render(d){
 
   // 総合
   let v='', cls='flat'; const sn=S.label;
-  if(m.shortUp && (m.longUp||curStyle==='short')){ v=`${sn}目線では<b>上昇トレンドで順張りしやすい</b>形。押し目を待って買い、割れたら損切り徹底。`; cls='up'; }
+  if(m.shortUp && (m.longUp||curStyle==='short')){
+    const way = m.entry>m.px*1.001 ? 'ブレイク（直近高値超え）で乗るのが本線' : m.pullback ? '押し目を待って買い' : '現在値圏で買える形';
+    v=`${sn}目線では<b>上昇トレンドで順張りしやすい</b>形。${way}、割れたら損切り徹底。`; cls='up';
+  }
   else if(m.shortDn){ v=`${sn}目線では<b>下降トレンド</b>。無理な逆張りは避け、5日線回復を確認してからが無難。`; cls='down'; }
   else{ v=`${sn}目線では<b>方向感が乏しい（もみ合い）</b>。ブレイク待ちかレンジ下限で拾う戦略。`; }
   if(m.cross?.type==='gc') v+=' 直近で<b>ゴールデンクロス</b>が出て上向きの後押し。';
@@ -953,11 +958,15 @@ function trendLines(m){
 // エントリー戦略: 支持までの距離とトレンドで、押し目/ブレイク/成行/様子見を出し分け
 function entryStrategy(m){
   const px=m.px, pull=m.entry, dist=(px-pull)/px*100;
-  const brk=Math.max(m.recHigh, px*1.002), brkAbove=px>=m.recHigh;
+  const brk=Math.max(m.recHigh, px*1.002);
+  const brkAbove = px >= (m.recHighPrev??m.recHigh)*0.999;  // 前日以前の高値を超えていれば「ブレイク済み=現在値で乗る」
   let label, note, recEntry;
   if(!m.shortUp && !m.longUp){
     label='様子見'; recEntry=pull;
     note=`トレンドが上向きでない。今は無理に買わず、<b>5日線回復や反発</b>を確認してから。買うなら押し目 ¥${fmt(pull)} を割らない範囲で慎重に。`;
+  } else if(brkAbove){
+    label=`順張り（現在値〜 ¥${fmt(px)}）`; recEntry=px;
+    note=`<b>直近高値を更新中（新高値ブレイク）</b>。順張りなら現在値で乗れる局面。ただし飛び乗りは高値づかみになりやすいので、損切り ¥${fmt(m.sl)} を必ずセットで。`;
   } else if(!m.pullback || dist<1){
     label=`現在が買い場圏（¥${fmt(px)}）`; recEntry=px;
     note=`支持のすぐ上にいて押し目とほぼ同水準。<b>現在値〜で拾える</b>。割れたら損切り ¥${fmt(m.sl)}。`;
@@ -1359,11 +1368,16 @@ function screenScore(rows, code){
   const uptrend = !!(m.sma75 && px>m.sma75) && sc>0;
   // 「今日の価格で買い推奨」判定: 上昇中で (a)支持線まで押した(乖離<1.5%) or (b)新高値ブレイク中
   const highs2=rows.map(r=>r.h), lows2=rows.map(r=>r.l);
-  const L=planLevels(closes, highs2, lows2, curStyle);
-  const distSup=(px-L.entry)/px*100;
-  const closeHigh20=Math.max(...closes.slice(-20));           // 終値ベースの直近高値
-  const atNewHigh = px>=closeHigh20*0.998;                    // 今日がほぼ最高終値＝ブレイク中
-  const buyNow = (m.shortUp||m.longUp) && sc>0 && (distSup<1.5 || atNewHigh);
+  // 「今日の価格で買い」判定（詳細のエントリー戦略と同一基準）
+  // 新高値: 前日以前20日の高値(当日除く)を終値が超えている
+  const hPrev2=highs2.slice(-21,-1);
+  const atNewHigh = hPrev2.length ? px>=Math.max(...hPrev2)*0.999 : false;
+  // 支持圏: 25日線 or 前日以前の直近安値(実体のある支持)のすぐ上(-0.5%〜+1%)
+  const lPrev2=lows2.slice(-21,-1);
+  const supBase=Math.max(m.sma25||0, lPrev2.length?Math.min(...lPrev2):0);
+  const distSup = supBase>0 ? (px-supBase)/px*100 : 99;
+  const atSupport = distSup>=-1.5 && distSup<1.0;   // 線の少し下〜1%上=支持圏(僅かな割り込みは許容)
+  const buyNow = (m.shortUp||m.longUp) && sc>0 && (atNewHigh || atSupport);
   if(buyNow) tags.unshift(atNewHigh?'新高値':'支持圏');
   return {code, px, mom, rsi:m.rsi, score:sc, tags, buy, sell, dev, bbPos:Math.round(bbPos), pos:Math.round(pos), gc:m.cross?.type==='gc', uptrend, buyNow};
 }
@@ -1408,7 +1422,12 @@ function renderScan(){
   const box=document.getElementById('slist');
   document.getElementById('lensDesc').textContent = LENS[curLens].d;
   const top=LENS[curLens].f(scanResults).slice(0,20);
-  if(!top.length){ box.innerHTML='<div class="card empty">この切り口では該当がありません。別のレンズか、スキャンし直してください。</div>'; return; }
+  if(!top.length){
+    box.innerHTML = curLens==='now'
+      ? '<div class="card empty">🛒 今日は「今買い」該当なし。<b>無理に買う日ではない</b>——それが今日の答えです。<br><span style="font-size:11px">（🌱押し目レンズで「あと少しで買い場」の候補を待ち伏せするのも手）</span></div>'
+      : '<div class="card empty">この切り口では該当がありません。別のレンズか、スキャンし直してください。</div>';
+    return;
+  }
   const medal=i=> i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1);
   const pr=window.prevRank||{};
   box.innerHTML=top.map((r,i)=>{
