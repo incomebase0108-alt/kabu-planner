@@ -1431,7 +1431,7 @@ function screenScore(rows, code){
   // 「今日の価格で売り推奨」判定: 下降中で (a)戻り高値圏まで戻した(乖離<1.5%) or (b)新安値ブレイク中
   // 新安値: 前日以前20日の安値(当日除く)を終値が下回っている
   const atNewLow = lPrev2.length ? px<=Math.min(...lPrev2)*1.001 : false;
-  // 抵抗圏: 25日線 or 前日以前の直近高値のすぐ下(-1.5%〜+1%)
+  // 抵抗圏: 25日線 or 前日以前の直近高値のすぐ下(-1%〜+1.5%)
   const resBase=Math.min(m.sma25||Infinity, hPrev2.length?Math.max(...hPrev2):Infinity);
   const distRes = resBase<Infinity ? (px-resBase)/px*100 : -99;
   const atResistance = distRes<=1.5 && distRes>-1.0;
