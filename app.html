@@ -1464,7 +1464,8 @@ async function screenAll(){
   scanResults.sort((a,b)=> b.score-a.score || b.mom-a.mom);
   renderScan(); buildTicker(); beep(880,0.08,0.05); setTimeout(()=>beep(1180,0.1,0.05),100);
   prog.textContent=`完了：${scanResults.length}銘柄を評価（上位20を表示）`;
-  try{ localStorage.setItem('toushi_scan', JSON.stringify({t:Date.now(), r:scanResults.slice(0,40)})); }catch(e){}
+  const keep=[...scanResults.slice(0,40), ...scanResults.filter(x=>x.sellNow)].filter((v,i,a)=>a.indexOf(v)===i);
+  try{ localStorage.setItem('toushi_scan', JSON.stringify({t:Date.now(), r:keep})); }catch(e){}
 }
 const LENS={
   now:  {d:'🛒 今日の価格で買い推奨（上昇中で支持圏まで押した or 新高値ブレイク中）— 該当ゼロの日もあります（それが正常）', f:a=>a.filter(r=>r.buyNow).sort((x,y)=>y.score-x.score)},
